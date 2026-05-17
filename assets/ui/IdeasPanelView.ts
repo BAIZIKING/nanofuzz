@@ -89,9 +89,7 @@ export class IdeasPanelView {
     // flatten & filter
     this._ideas.forEach((t) => {
       console.debug(`${t.size} subideas`); // !!!!!!!!!!!
-      ideas.push(
-        ...Array.from(t.values()) /*!!!!!!!!!!.filter((i) => i.priority > 0)*/
-      );
+      ideas.push(...Array.from(t.values()));
     });
     console.debug(`${ideas.length} total ideas`); // !!!!!!!!!!!
     // sort
@@ -166,10 +164,10 @@ export class IdeasPanelView {
     const ideas = this._getIdeas();
     this._updateBadge(ideas.length);
 
-    // empty row
+    // empty row (shown when there are no results to show)
     const emptyRow = document.createElement("tr");
     emptyRow.id = `idea-empty`;
-    emptyRow.innerHTML = `<td colspan="${cols.length}"><span>No new ideas have been suggested</td>`;
+    emptyRow.innerHTML = `<td colspan="${cols.length}"><span>No new ideas to share right now</td>`;
     (ideas.length ? hide : show)(emptyRow);
 
     tbody.replaceChildren(emptyRow);

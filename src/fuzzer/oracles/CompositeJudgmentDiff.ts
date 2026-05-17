@@ -245,20 +245,19 @@ export class CompositeJudgmentDiff {
     const negativeAspects = diff.falseFailures.length + diff.falsePasses.length;
     const neutralAspects = diff.trueFailures.length + diff.truePasses.length;
     const positiveAspects = diff.prospectiveFailures.length;
+    const exceptions = diff.exceptions.length;
 
     const total =
-      negativeAspects +
-      neutralAspects +
-      positiveAspects +
-      diff.exceptions.length;
-    const factor = 100 / total;
+      negativeAspects + neutralAspects + positiveAspects + exceptions;
+
+    if (!neutralAspects) return 0;
 
     if (negativeAspects) {
-      return (
-        ((negativeAspects / factor) * (neutralAspects / factor) * -1) / factor
-      );
+      return (negativeAspects + exceptions) * -1 + positiveAspects / total;
+    } else if (positiveAspects) {
+      return positiveAspects - (negativeAspects + exceptions) / total;
     } else {
-      return (positiveAspects / factor) * (neutralAspects / factor);
+      return 0 - exceptions / total;
     }
   } // fn: prioritize
 } // class: CompositeJudgmentDiff

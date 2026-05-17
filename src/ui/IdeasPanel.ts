@@ -108,10 +108,12 @@ export function proposeProperties(
     props.forEach((p) => {
       console.debug(`---------------------`); // !!!!!!!!!!
       const diff = differ.diffFor([p.functionName]);
-      message.props[p.functionName] = {
-        src: p.functionSourceCode.join("\n"),
-        diff,
-      };
+      if (diff.priority > 0) {
+        message.props[p.functionName] = {
+          src: p.functionSourceCode.join("\n"),
+          diff,
+        };
+      }
       console.debug(
         `diff for "${p.functionName}": ${JSON5.stringify(
           {
