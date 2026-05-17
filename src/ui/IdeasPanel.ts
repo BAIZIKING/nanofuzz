@@ -2,7 +2,7 @@ import JSON5 from "json5";
 import * as vscode from "vscode";
 import * as zod from "zod";
 import { LlmAdapter } from "../fuzzer/adapters/LlmAdapter";
-import { FunctionDef, FuzzTestResults } from "../fuzzer/Fuzzer";
+import { FunctionDef, FuzzTestResults, ProgramDef } from "../fuzzer/Fuzzer";
 import {
   CompositeJudgmentDiff,
   JudgedExample,
@@ -38,7 +38,7 @@ export function proposeProperties(
   webview: vscode.Webview,
   fn: FunctionDef,
   results: FuzzTestResults
-) {
+): void {
   if (
     _isBusy ||
     !LlmAdapter.isConfigured() ||
@@ -83,6 +83,27 @@ export function proposeProperties(
     console.debug(
       `In the post-llm handler with: ${JSON5.stringify(props, null, 2)}`
     ); // !!!!!!!!!!
+    // Check that we can parse the generated property and it is a validator for the PUT
+    props.filter((prop) => {
+      try {
+        const propFns = ProgramDef.fromSource(() =>
+          prop.functionSourceCode.join("\n")
+        ).getFunctions();
+        if (prop.functionName in propFns) {
+          const vFn = propFns[prop.functionName];
+          return (
+            vFn.isValidator() && vFn.getValidatorTargetName() === fn.getName()
+          );
+        }
+      } catch (_e: unknown) {
+        console.debug(
+          `Exception parsing generated validator: ${prop.functionName}. Src: ${prop.functionSourceCode}`
+        );
+        return false;
+      }
+      return false;
+    });
+
     const differ = new CompositeJudgmentDiff(
       results.runId,
       examples,
