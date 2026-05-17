@@ -2376,7 +2376,7 @@ function handleOpenSource() {
 // !!!!!!
 function handleProposeProps(props: {
   [k: string]: {
-    src: string;
+    src: string[];
     diff: JudgmentDiff;
   };
 }) {

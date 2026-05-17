@@ -63,7 +63,7 @@ export class IdeasPanelView {
       case "property.suggestion": {
         const message: FuzzPanelMessageFromWebView = {
           command: "validator.add",
-          prop: { ...idea.prop },
+          prop: { ...idea.prop, src: idea.prop.src.join("\n") },
         };
         this._vscode.postMessage(message);
       }
@@ -345,9 +345,10 @@ export class IdeasPanelView {
             })),
           ];
 
+          const lineDigits = Math.floor(i.prop.src.length / 10) + 1;
           td.innerHTML = /*html*/ `
             <div>Adding this property validator...
-              <small><pre class="slightIndent">${htmlEscape(i.prop.src)}</pre></small>
+              <small><pre class="code">${i.prop.src.map((l, i) => `<span class="lineNumber">${(i + 1).toString().padStart(lineDigits, "0")}</span> ${htmlEscape(l)}`).join("\n")}</pre></small>
             </div>
             ${
               exceptions.length === 0
@@ -466,7 +467,7 @@ type Idea = {
   priority: number;
   prop: {
     name: string;
-    src: string;
+    src: string[];
   };
   diff: JudgmentDiff;
   /* !!!!!!!!!!

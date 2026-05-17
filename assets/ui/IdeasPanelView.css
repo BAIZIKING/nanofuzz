@@ -64,9 +64,6 @@
   top: 4em;
   z-index: 1;
 }
-.ideasGrid pre.slightIndent {
-  margin-left: 1em;
-}
 .ideasGrid > tbody > tr#idea-empty > td {
   padding-top: 0.5em;
   padding-bottom: 0.5em;
@@ -74,4 +71,8 @@
 }
 .ideasGrid > tbody > tr#idea-empty > td > span {
   opacity: 60%;
+}
+.ideasGrid pre.code > span.lineNumber {
+  color: var(--vscode-editorLineNumber-foreground);
+  padding-right: 0.75em;
 }

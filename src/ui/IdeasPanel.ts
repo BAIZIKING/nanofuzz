@@ -131,7 +131,7 @@ export function proposeProperties(
       const diff = differ.diffFor([p.functionName]);
       if (diff.priority > 0) {
         message.props[p.functionName] = {
-          src: p.functionSourceCode.join("\n"),
+          src: p.functionSourceCode,
           diff,
         };
       }

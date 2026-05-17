@@ -3657,7 +3657,7 @@ export type FuzzPanelMessageToWebView =
       command: "props.proposed";
       props: {
         [k: string]: {
-          src: string;
+          src: string[];
           diff: JudgmentDiff;
         };
       }; // TODO Diffs of multiple props
