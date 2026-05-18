@@ -1,5 +1,5 @@
 import * as JSON5 from "json5";
-import { Judgment, Result } from "../Types";
+import { Judgment, ResultWrapped } from "../Types";
 import { CompositeOracle } from "./CompositeOracle";
 import { PropertyOracle } from "./PropertyOracle";
 import { AbstractRunner } from "../runners/AbstractRunner";
@@ -263,7 +263,7 @@ export class CompositeJudgmentDiff {
 } // class: CompositeJudgmentDiff
 
 export type JudgedExample = {
-  example: Result;
+  example: ResultWrapped;
   source: {
     runId: string;
     testId: number;

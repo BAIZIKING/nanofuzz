@@ -17,7 +17,6 @@ import { normalizePathForKey } from "../fuzzer/Util";
 import { CodeCoverageMeasureStats } from "../fuzzer/measures/CoverageMeasure";
 import { getPropertyTestSkeleton } from "../fuzzer/analysis/typescript/Util";
 import { proposeProperties } from "./IdeasPanel";
-import { JudgmentDiff } from "../fuzzer/oracles/CompositeJudgmentDiff";
 
 /**
  * FuzzPanel displays fuzzer options, actions, and the last results for a
@@ -2653,6 +2652,11 @@ ${src}`;
               ${htmlEscape(JSON5.stringify(hiddenColumns))}
             </div>
 
+            <!-- Function Input Names -->
+            <div id="fuzzFnInputNames" class="hidden">
+              ${htmlEscape(JSON5.stringify(this._fuzzEnv.function.getArgDefs().map((a) => a.getName())))}
+            </div>
+
             <!-- Validator Functions: for the client script to process -->
             <div id="validators" class="hidden">
               ${htmlEscape(
@@ -3674,7 +3678,7 @@ export type FuzzPanelMessageToWebView =
       props: {
         [k: string]: {
           src: string[];
-          diff: JudgmentDiff;
+          diffSerialized: string; /* JudgmentDiff */
         };
       }; // TODO Diffs of multiple props
     };

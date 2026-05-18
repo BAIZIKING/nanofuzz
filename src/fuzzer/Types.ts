@@ -45,6 +45,16 @@ export type Result = {
 };
 
 /**
+ * Simplified wrapped single test result for serialization
+ */
+export type ResultWrapped = {
+  in: ArgValueTypeWrapped[]; // function input
+  out: unknown; // function output
+  exception: boolean; // true if an exception was thrown
+  timeout: boolean; // true if the fn call timed out
+};
+
+/**
  * Fuzzer Tests - intended to be persisted a fuzzer configuration and
  * its tests to the file system
  */

@@ -2379,7 +2379,7 @@ function handleOpenSource() {
 function handleProposeProps(props: {
   [k: string]: {
     src: string[];
-    diff: JudgmentDiff;
+    diffSerialized: string; /* JudgmentDiff */
   };
 }) {
   // Create the ideas grid if it doesn't exist yet
@@ -2388,6 +2388,9 @@ function handleProposeProps(props: {
       // Ideas Panel View
       ideasGrid = new IdeasPanelView(
         vscode,
+        JSON5.parse<string[]>(
+          getElementByIdOrThrow("fuzzFnInputNames").innerText
+        ),
         getElementByIdOrThrow("tab-ideas"),
         getElementByIdOrThrow("fuzzResultsGrid-ideas")
       );
@@ -2395,6 +2398,7 @@ function handleProposeProps(props: {
       console.debug(
         `Discarded proposed properties message because no ideas grid is present on the page`
       );
+      return;
     }
   }
 
@@ -2402,15 +2406,16 @@ function handleProposeProps(props: {
   ideasGrid.deleteAllOfType("property.suggestion");
   ideasGrid.add(
     Object.keys(props).map((k) => {
+      const diff = JSON5.parse<JudgmentDiff>(props[k].diffSerialized);
       return {
         type: "property.suggestion" as const,
         id: k,
-        priority: props[k].diff.priority,
+        priority: diff.priority,
         prop: {
           name: k,
           src: props[k].src,
         },
-        diff: props[k].diff,
+        diff: diff,
       };
     })
   );

@@ -58,7 +58,10 @@ export function proposeProperties(
         exception: r.exception,
         timeout: r.timeout,
         out: r.output[0]?.value,
-        in: r.input.map((i) => i.value),
+        in: r.input.map((i) => ({
+          tag: "ArgValueTypeWrapped",
+          value: i.value,
+        })),
       },
       source: {
         runId: results.runId,
@@ -132,7 +135,7 @@ export function proposeProperties(
       if (diff.priority > 0) {
         message.props[p.functionName] = {
           src: p.functionSourceCode,
-          diff,
+          diffSerialized: JSON5.stringify(diff),
         };
       }
       console.debug(

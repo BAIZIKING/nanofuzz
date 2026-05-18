@@ -12,16 +12,19 @@ export class IdeasPanelView {
   protected _drawnYet = false;
   protected _htmlTab: HTMLElement;
   protected _htmlGrid: HTMLElement;
+  protected _inputNames: string[];
   protected _vscode: WebviewApi<unknown>;
 
   constructor(
     vscode: WebviewApi<unknown>,
+    inputNames: string[],
     htmlTab: HTMLElement,
     htmlGrid: HTMLElement
   ) {
     this._vscode = vscode;
     this._htmlGrid = htmlGrid;
     this._htmlTab = htmlTab;
+    this._inputNames = inputNames;
     this._draw();
   }
 
@@ -361,7 +364,7 @@ export class IdeasPanelView {
                   <thead> 
                     <tr>
                       <th>&nbsp;</th>
-                      <th>inputs</th>
+                      ${this._inputNames.map((i) => /*html*/ `<th>input: ${htmlEscape(i)}</th>`).join("\n")}
                       <th>validator would throw exception</th>
                     </tr>
                   </thead>
@@ -371,7 +374,13 @@ export class IdeasPanelView {
                         (e) => /*html*/ `
                     <tr>
                       <td><span class="codicon codicon-warn"></span></td>
-                      <td class="editorFont">${htmlEscape(JSON5.stringify(e.example.in))}</td>
+                      ${this._inputNames
+                        .map((_name, i) =>
+                          e.example.in[i].value === undefined
+                            ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
+                            : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(e.example.in[i].value))}</span></td>`
+                        )
+                        .join("\n")}
                       <td class="editorFont">${htmlEscape(
                         getExceptionMsg(e.addlJudgments[i.prop.name])
                       )}
@@ -395,7 +404,7 @@ export class IdeasPanelView {
                         </div>
                       </span>
                     </th>
-                    <th>inputs</th>
+                    ${this._inputNames.map((i) => /*html*/ `<th>input: ${htmlEscape(i)}</th>`).join("\n")}
                     <th>output</th>
                     <th>current judgment</th>
                     <th>new judgment</td>
@@ -414,7 +423,13 @@ export class IdeasPanelView {
                         </div>
                       </span>
                     </td>
-                    <td class="editorFont">${htmlEscape(JSON5.stringify(j.example.in))}</td>
+                    ${this._inputNames
+                      .map((_name, i) =>
+                        j.example.in[i].value === undefined
+                          ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
+                          : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.in[i].value))}</span></td>`
+                      )
+                      .join("\n")}
                     <td class="editorFont">${htmlEscape(j.example.out === undefined ? "undefined" : JSON5.stringify(j.example.out))}</td>
                     <td class="editorFont removedLine">${j.judgments.composite}</td>
                     <td class="editorFont addedLine">${j.rejudgment}</td>
