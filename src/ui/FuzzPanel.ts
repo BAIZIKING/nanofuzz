@@ -1540,6 +1540,7 @@ ${src}`;
 				    <meta http-equiv="Content-Security-Policy" content="${csp}">
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <!-- VS Code UI Toolkit -->
             <script type="module" src="${getUri(webview, extensionUri, [
               "node_modules",
               "@vscode",
@@ -1547,12 +1548,32 @@ ${src}`;
               "dist",
               "toolkit.js",
             ])}"></script>
+            <!-- JSON5 -->
             <script src="${getUri(webview, extensionUri, [
               "node_modules",
               "json5",
               "dist",
               "index.js",
             ])}"></script>
+            <!-- VSCode icons -->
+            <link rel="stylesheet" type="text/css" href="${getUri(
+              webview,
+              extensionUri,
+              ["node_modules", "@vscode", "codicons", "dist", "codicon.css"]
+            )}">
+            <!-- Syntax highligting -->
+            <link rel="stylesheet" href="${getUri(webview, extensionUri, [
+              "node_modules",
+              "highlight.js",
+              "styles",
+              vscode.window.activeColorTheme.kind ===
+                vscode.ColorThemeKind.Dark ||
+              vscode.window.activeColorTheme.kind ===
+                vscode.ColorThemeKind.HighContrast
+                ? "dark.min.css"
+                : "default.min.css",
+            ])}">
+            <!-- NaNofuzz Assets -->
             <script type="module" src="${getUri(webview, extensionUri, [
               "build",
               "ui",
@@ -1567,11 +1588,6 @@ ${src}`;
               webview,
               extensionUri,
               ["assets", "ui", "IdeasPanelView.css"]
-            )}">
-            <link rel="stylesheet" type="text/css" href="${getUri(
-              webview,
-              extensionUri,
-              ["node_modules", "@vscode", "codicons", "dist", "codicon.css"]
             )}">
             <title>${toolName} Panel</title>
           </head>

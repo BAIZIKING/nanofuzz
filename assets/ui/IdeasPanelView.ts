@@ -345,10 +345,11 @@ export class IdeasPanelView {
             })),
           ];
 
-          const lineDigits = Math.floor(i.prop.src.length / 10) + 1;
           td.innerHTML = /*html*/ `
             <div>Adding this property validator...
-              <small><pre class="code">${i.prop.src.map((l, i) => `<span class="lineNumber">${(i + 1).toString().padStart(lineDigits, "0")}</span> ${htmlEscape(l)}`).join("\n")}</pre></small>
+              <small>
+                <pre class="code"><code class="typescript.html">${i.prop.src.join("\n")}</code></pre>
+              </small>
             </div>
             ${
               exceptions.length === 0

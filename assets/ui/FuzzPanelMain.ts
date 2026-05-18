@@ -1,4 +1,5 @@
 import * as JSON5 from "json5";
+import hljs from "highlight.js";
 import {
   getElementByIdOrThrow,
   getElementByIdWithTypeOrThrow,
@@ -462,6 +463,7 @@ function main() {
         break;
       case "props.proposed":
         handleProposeProps(data.props);
+        hljs.highlightAll();
         break;
     }
   });

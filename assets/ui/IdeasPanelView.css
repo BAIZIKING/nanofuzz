@@ -72,7 +72,7 @@
 .ideasGrid > tbody > tr#idea-empty > td > span {
   opacity: 60%;
 }
-.ideasGrid pre.code > span.lineNumber {
-  color: var(--vscode-editorLineNumber-foreground);
-  padding-right: 0.75em;
+.ideasGrid pre.code {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
 }
