@@ -3,7 +3,7 @@ import {
   ArgValueType,
   ArgValueTypeWrapped,
 } from "./analysis/typescript/Types";
-import { Judgment as _Judgment } from "./oracles/Types";
+import { NamedJudgment as _NamedJudgment } from "./oracles/Types";
 
 /**
  * Single Fuzzer Test Result
@@ -17,14 +17,10 @@ export type FuzzTestResult = {
   exceptionMessage?: string; // exception message if an exception was thrown
   stack?: string; // stack trace if an exception was thrown
   timeout: boolean; // true if the fn call timed out
-  passedImplicit: Judgment; // "pass" if output passed implicit oracle
-  passedHuman: Judgment; // "pass" if actual output matches human-expected output
-  passedValidator: Judgment; // "pass" if passed all property oracles
-  passedValidators: Judgment[]; // "pass" if passed all property oracles
-  validatorException: boolean; // true if validator threw an exception
-  validatorExceptionMessage?: string; // validator exception message
-  validatorExceptionFunction?: string; // name of validator throwing exception
-  validatorExceptionStack?: string; // validator stack trace if exception was thrown
+  passedImplicit: NamedJudgment; // "pass" if output passed implicit oracle
+  passedHuman: NamedJudgment; // "pass" if actual output matches human-expected output
+  passedValidator: NamedJudgment; // "pass" if passed all property oracles
+  passedValidators: NamedJudgment[]; // "pass" if passed all property oracles
   timers: {
     gen: number; // time to generate the input in ms
     run: number; // elapsed time of test in ms
@@ -48,11 +44,28 @@ export type Result = {
  * Simplified wrapped single test result for serialization
  */
 export type ResultWrapped = {
-  in: ArgValueTypeWrapped[]; // function input
+  inWrapped: ArgValueTypeWrapped[]; // function input
   out: unknown; // function output
   exception: boolean; // true if an exception was thrown
   timeout: boolean; // true if the fn call timed out
 };
+
+export function wrapResult(r: Result): ResultWrapped {
+  return {
+    inWrapped: r.in.map((i) => ({ tag: "ArgValueTypeWrapped", value: i })),
+    out: r.out,
+    exception: r.exception,
+    timeout: r.timeout,
+  };
+}
+export function unwrapResult(r: ResultWrapped): Result {
+  return {
+    in: r.inWrapped.map((i) => i.value),
+    out: r.out,
+    exception: r.exception,
+    timeout: r.timeout,
+  };
+}
 
 /**
  * Fuzzer Tests - intended to be persisted a fuzzer configuration and
@@ -295,4 +308,4 @@ export class TscCompilerError extends Error {
   }
 }
 
-export type Judgment = _Judgment;
+export type NamedJudgment = _NamedJudgment;

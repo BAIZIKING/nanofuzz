@@ -1,4 +1,4 @@
-import { Judgment } from "./Types";
+import { NamedJudgment } from "./Types";
 import { Result } from "../Types";
 import { isError } from "../../Util";
 import { AbstractRunner } from "../runners/AbstractRunner";
@@ -16,33 +16,44 @@ export class PropertyOracle {
    * @param `result` result of executing the program
    * @returns one judgment or one exception for each property validator
    */
-  public judge(result: Result): (Judgment | Error)[] {
-    const jj: (Judgment | Error)[] = [];
+  public judge(result: Result): NamedJudgment[] {
+    const jj: NamedJudgment[] = [];
     for (const r of this._propRunners) {
+      const j = {
+        name: r.name,
+        trace: [],
+        deciders: [],
+      };
       try {
         const validatorOut = r.run([result])[0];
         switch (validatorOut) {
           case true: // v0.3
           case "pass": // v0.4
-            jj.push("pass");
+            jj.push({ ...j, judgment: "pass" });
             break;
           case false: // v0.3
           case "fail": // v0.4
-            jj.push("fail");
+            jj.push({ ...j, judgment: "fail" });
             break;
           case undefined: // v0.3
           case "unknown": // v0.4
-            jj.push("unknown");
+            jj.push({ ...j, judgment: "unknown" });
             break;
           default:
             jj.push({
-              name: `InvalidJudgmentException`,
-              message: `Property validator did not return: "pass" | "fail" | "unknown"`,
+              ...j,
+              judgment: "unknown",
+              error: {
+                name: `InvalidJudgmentException`,
+                message: `Property validator did not return: "pass" | "fail" | "unknown"`,
+              },
             });
         }
       } catch (e: unknown) {
-        jj.push(
-          JSON.parse(
+        jj.push({
+          ...j,
+          judgment: "unknown",
+          error: JSON.parse(
             JSON.stringify(
               isError(e)
                 ? {
@@ -56,8 +67,8 @@ export class PropertyOracle {
                     cause: e,
                   }
             )
-          )
-        );
+          ),
+        });
       }
     }
     return jj;
@@ -74,13 +85,26 @@ export class PropertyOracle {
    * @param `judgments` array of individual property-based judgments
    * @returns summarized judgment
    */
-  public static summarize(judgments: Judgment[]): Judgment {
-    let summary: Judgment = "unknown";
+  public static summarize(judgments: NamedJudgment[]): NamedJudgment {
+    const summary: NamedJudgment = {
+      name: "PropertyOracle",
+      judgment: "unknown",
+      trace: [...judgments],
+      deciders: [],
+    };
     for (const j of judgments) {
-      if (summary === "unknown" && j === "pass") {
-        summary = "pass";
-      } else if (j === "fail") {
-        return "fail";
+      if (j.error) {
+        return {
+          ...summary,
+          error: { ...j.error },
+          judgment: "unknown",
+          deciders: [j],
+        };
+      } else if (j.judgment === "pass") {
+        summary.judgment = "pass";
+        summary.deciders.push(j);
+      } else if (j.judgment === "fail") {
+        return { ...summary, judgment: "fail", deciders: [j] };
       }
     }
     return summary;

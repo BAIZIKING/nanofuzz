@@ -17,7 +17,7 @@ import {
   FuzzSortOrder,
   FuzzValueOrigin,
   isFuzzResultTab,
-  Judgment,
+  NamedJudgment,
 } from "../../src/fuzzer/Types";
 import {
   ArgValueType,
@@ -561,7 +561,7 @@ function main() {
       //   : {};
 
       // Result for each property validator ("pass"" if passed)
-      const validatorFns: Record<string, Judgment> = {};
+      const validatorFns: Record<string, NamedJudgment> = {};
       e.passedValidators.forEach((j, i) => {
         validatorFns[validators[i]] = j;
       });
@@ -583,9 +583,9 @@ function main() {
         outputs[`output`] =
           o.value === undefined ? "undefined" : JSON5.stringify(o.value);
       });
-      if (e.validatorException) {
+      if (e.passedValidator.error) {
         outputs[`output`] =
-          `(${e.validatorExceptionFunction} exception) ${e.validatorExceptionMessage}`;
+          `(${e.passedValidator.deciders[0]?.name ?? "Validator"} exception) ${e.passedValidator.error.message}`;
       } else if (e.exception) {
         outputs[`output`] = "(exception) " + e.exceptionMessage;
       }
@@ -1173,21 +1173,21 @@ function handleCorrectToggle(
     // clicking check off
     button.className = correctState.classCheckOff;
     button.setAttribute("onOff", "false");
-    data[type][index][correctLabel] = "unknown";
+    data[type][index][correctLabel].judgment = "unknown";
     // delete saved expected value
     delete data[type][index][expectedLabel];
   } else if (button.classList.contains(correctState.classErrorOn)) {
     // clicking error off
     button.className = correctState.classErrorOff;
     button.setAttribute("onOff", "false");
-    data[type][index][correctLabel] = "unknown";
+    data[type][index][correctLabel].judgment = "unknown";
     // delete saved expected value
     delete data[type][index][expectedLabel];
   } else if (button.classList.contains(correctState.classCheckOff)) {
     // clicking check on
     button.className = correctState.classCheckOn;
     button.setAttribute("onOff", "true");
-    data[type][index][correctLabel] = "pass";
+    data[type][index][correctLabel].judgment = "pass";
     // turn others off
     cell2.className = correctState.classErrorOff;
     cell2.setAttribute("onOff", "false");
@@ -1207,7 +1207,7 @@ function handleCorrectToggle(
     // clicking error on
     button.className = correctState.classErrorOn;
     button.setAttribute("onOff", "true");
-    data[type][index][correctLabel] = "fail";
+    data[type][index][correctLabel].judgment = "fail";
     // turn others off
     cell1.className = correctState.classCheckOff;
     cell1.setAttribute("onOff", "false");
@@ -1399,7 +1399,7 @@ function handleColumnSort(
       )
     ) {
       // Special sort order for judgments
-      [a, b] = [a[thisCol], b[thisCol]].map((j) =>
+      [a, b] = [a[thisCol].judgment, b[thisCol].judgment].map((j) =>
         j === "pass" ? 2 : j === "fail" ? 1 : 0
       );
     } else {
@@ -1600,16 +1600,16 @@ function drawTableBody({
           const span = cell.appendChild(document.createElement("span"));
           // Fade the indicator if overridden by another validator
           if (
-            (e[correctLabel] ?? "unknown") !== "unknown" ||
-            (e[validatorLabel] ?? "unknown") !== "unknown"
+            (e[correctLabel].judgment ?? "unknown") !== "unknown" ||
+            (e[validatorLabel]?.judgment ?? "unknown") !== "unknown"
           ) {
             span.classList.add("overridden");
           }
-          if (e[k] === "unknown") {
+          if (e[k].judgment === "unknown") {
             cell.classList.add("classUnknown", "colGroupStart", "colGroupEnd");
             span.classList.add("codicon", "codicon-circle-large");
             span.setAttribute("title", "undecided");
-          } else if (e[k] === "pass") {
+          } else if (e[k].judgment === "pass") {
             cell.classList.add("classCheckOn", "colGroupStart", "colGroupEnd");
             span.classList.add("codicon", "codicon-pass");
             span.setAttribute("title", "passed");
@@ -1626,12 +1626,12 @@ function drawTableBody({
           if (validators.length > 1) {
             cell.style.paddingRight = "0px"; // close to twistie column if multiple validators
           }
-          if (e[k] === "unknown") {
+          if (e[k].judgment === "unknown") {
             cell.classList.add("classUnknown", "colGroupStart", "colGroupEnd");
             const span = cell.appendChild(document.createElement("span"));
             span.classList.add("codicon", "codicon-circle-large");
             span.setAttribute("title", "undecided");
-          } else if (e[k] === "pass") {
+          } else if (e[k].judgment === "pass") {
             cell.classList.add("classCheckOn", "colGroupStart", "colGroupEnd");
             const span = cell.appendChild(document.createElement("span"));
             span.classList.add("codicon", "codicon-pass");
@@ -1658,11 +1658,11 @@ function drawTableBody({
           const cell = row.appendChild(document.createElement("td"));
           const span = cell.appendChild(document.createElement("span"));
           cell.style.textAlign = "right";
-          if (e[k] === "unknown") {
+          if (e[k].judgment === "unknown") {
             cell.classList.add("classUnknown", "colGroupStart", "colGroupEnd");
             span.classList.add("codicon", "codicon-circle-large");
             span.setAttribute("title", "undecided");
-          } else if (e[k] === "pass") {
+          } else if (e[k].judgment === "pass") {
             cell.classList.add("classCheckOn", "colGroupStart", "colGroupEnd");
             span.classList.add("codicon", "codicon-pass", "overridden"); // Fade check mark for passed tests
             span.setAttribute("title", "passed");
@@ -1708,7 +1708,7 @@ function drawTableBody({
         });
 
         // Update the front-end buttons to match the back-end state
-        switch (e[k] ?? "unknown") {
+        switch (e[k].judgment ?? "unknown") {
           case "unknown":
             break;
           case "pass":
@@ -1801,7 +1801,7 @@ function handleExpectedOutput({
   const correctType = data[type][index][correctLabel];
 
   // If actual output does not match expected output, show expected/actual output
-  if (correctType === "fail") {
+  if (correctType.judgment === "fail") {
     const expectedRow = row.insertAdjacentElement(
       "afterend",
       document.createElement("tr")

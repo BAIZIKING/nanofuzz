@@ -376,9 +376,9 @@ export class IdeasPanelView {
                       <td><span class="codicon codicon-warn"></span></td>
                       ${this._inputNames
                         .map((_name, i) =>
-                          e.example.in[i].value === undefined
+                          e.example.inWrapped[i].value === undefined
                             ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
-                            : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(e.example.in[i].value))}</span></td>`
+                            : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(e.example.inWrapped[i].value))}</span></td>`
                         )
                         .join("\n")}
                       <td class="editorFont">${htmlEscape(
@@ -425,14 +425,14 @@ export class IdeasPanelView {
                     </td>
                     ${this._inputNames
                       .map((_name, i) =>
-                        j.example.in[i].value === undefined
+                        j.example.inWrapped[i].value === undefined
                           ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
-                          : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.in[i].value))}</span></td>`
+                          : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.inWrapped[i].value))}</span></td>`
                       )
                       .join("\n")}
                     <td class="editorFont">${htmlEscape(j.example.out === undefined ? "undefined" : JSON5.stringify(j.example.out))}</td>
-                    <td class="editorFont removedLine">${j.judgments.composite}</td>
-                    <td class="editorFont addedLine">${j.rejudgment}</td>
+                    <td class="editorFont removedLine">${j.judgments.composite.judgment}</td>
+                    <td class="editorFont addedLine">${j.rejudgment.judgment}</td>
                     <td class="colorColumn"><span><span title="more info" class="clickable codicon codicon-info"><!-- event handler !!!!!!!!!! --></span></span></td>
                   </tr>`
                     )

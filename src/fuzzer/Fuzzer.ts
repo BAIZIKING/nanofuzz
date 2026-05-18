@@ -561,27 +561,35 @@ export class Tester {
         );
         console.log(
           ` - Total tests where human validator passed: ${
-            this._results.results.filter((e) => e.passedHuman === "pass").length
+            this._results.results.filter(
+              (e) => e.passedHuman.judgment === "pass"
+            ).length
           }, failed: ${
-            this._results.results.filter((e) => e.passedHuman === "fail").length
+            this._results.results.filter(
+              (e) => e.passedHuman.judgment === "fail"
+            ).length
           }`
         );
         console.log(
           ` - Total tests where property validator passed: ${
-            this._results.results.filter((e) => e.passedValidator === "pass")
-              .length
+            this._results.results.filter(
+              (e) => e.passedValidator.judgment === "pass"
+            ).length
           }, failed: ${
-            this._results.results.filter((e) => e.passedValidator === "fail")
-              .length
+            this._results.results.filter(
+              (e) => e.passedValidator.judgment === "fail"
+            ).length
           }`
         );
         console.log(
           ` - Total tests where heuristic validator passed: ${
-            this._results.results.filter((e) => e.passedImplicit === "pass")
-              .length
+            this._results.results.filter(
+              (e) => e.passedImplicit.judgment === "pass"
+            ).length
           }, failed: ${
-            this._results.results.filter((e) => e.passedImplicit === "fail")
-              .length
+            this._results.results.filter(
+              (e) => e.passedImplicit.judgment === "fail"
+            ).length
           }`
         );
 
@@ -612,11 +620,25 @@ export class Tester {
         input: [],
         output: [],
         exception: false,
-        validatorException: false,
         timeout: false,
-        passedImplicit: "unknown",
-        passedHuman: "unknown",
-        passedValidator: "unknown",
+        passedImplicit: {
+          name: "HeuristicOracle",
+          judgment: "unknown",
+          trace: [],
+          deciders: [],
+        },
+        passedHuman: {
+          name: "ExampleOracle",
+          judgment: "unknown",
+          trace: [],
+          deciders: [],
+        },
+        passedValidator: {
+          name: "PropertyOracle",
+          judgment: "unknown",
+          trace: [],
+          deciders: [],
+        },
         passedValidators: [],
         timers: {
           run: 0,
@@ -789,31 +811,19 @@ export class Tester {
       // PROPERTY ORACLE --------------------------------------------
       // If a property validator is selected, call it to evaluate the result
       if (this._options.useProperty) {
-        propertyOracle
-          .judge(
-            Object.freeze({
-              in: result.input.map((i) => i.value), // inputs
-              out:
-                result.output.length === 0
-                  ? "timeout or exception"
-                  : result.output[0].value,
-              exception: result.exception,
-              timeout: result.timeout,
-            })
-          )
-          .forEach((j, i) => {
-            if (isError(j)) {
-              result.passedValidators.push("unknown");
-              result.validatorException = true;
-              result.validatorExceptionMessage = j.message;
-              result.validatorExceptionFunction = this._validators[i].name;
-              result.validatorExceptionStack = j.stack;
-            } else {
-              result.passedValidators.push(j);
-            }
-          });
+        result.passedValidators = propertyOracle.judge(
+          Object.freeze({
+            in: result.input.map((i) => i.value), // inputs
+            out:
+              result.output.length === 0
+                ? "timeout or exception"
+                : result.output[0].value,
+            exception: result.exception,
+            timeout: result.timeout,
+          })
+        );
 
-        // Summarize propert judgments.
+        // Summarize property judgments
         result.passedValidator = PropertyOracle.summarize(
           result.passedValidators
         );
@@ -1060,7 +1070,7 @@ export function getValidators(
  * @returns the category of the result
  */
 export function categorizeResult(result: FuzzTestResult): FuzzResultCategory {
-  if (result.validatorException) {
+  if (result.passedValidator.error) {
     return "failure"; // Validator failed
   }
 
@@ -1086,7 +1096,7 @@ export function categorizeResult(result: FuzzTestResult): FuzzResultCategory {
     CompositeOracle.judge([
       [result.passedValidator, result.passedHuman],
       [result.passedImplicit],
-    ])
+    ]).judgment
   ) {
     case "pass":
       return "ok";

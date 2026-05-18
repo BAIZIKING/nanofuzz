@@ -1,5 +1,5 @@
 import { FuzzIoElement } from "../Types";
-import { Judgment } from "./Types";
+import { NamedJudgment } from "./Types";
 
 /**
  * The implicit oracle only passes when:
@@ -13,18 +13,31 @@ export class ImplicitOracle {
     exception: boolean,
     isVoidFn: boolean,
     outputValue: FuzzIoElement[]
-  ): Judgment {
+  ): NamedJudgment {
+    const j = {
+      name: "heuristic",
+      trace: [],
+      deciders: [],
+    };
     if (exception || timeout) {
       // Exceptions and timeouts fail the implicit oracle
-      return "fail";
+      return { ...j, judgment: "fail" };
     } else if (isVoidFn) {
       // Functions with a void return type should only return undefined
-      return outputValue.some((e) => e.value !== undefined) ? "fail" : "pass";
+      return {
+        ...j,
+        judgment: outputValue.some((e) => e.value !== undefined)
+          ? "fail"
+          : "pass",
+      };
     } else {
       // Non-void functions should not output disallowed values
-      return outputValue.some((e) => !implicitOracle(e.value))
-        ? "fail"
-        : "pass";
+      return {
+        ...j,
+        judgment: outputValue.some((e) => !implicitOracle(e.value))
+          ? "fail"
+          : "pass",
+      };
     }
   } // fn: judge
 } // class: ImplicitOracle

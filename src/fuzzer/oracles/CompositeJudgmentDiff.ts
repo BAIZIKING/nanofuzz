@@ -1,9 +1,8 @@
 import * as JSON5 from "json5";
-import { Judgment, ResultWrapped } from "../Types";
+import { NamedJudgment, ResultWrapped, unwrapResult } from "../Types";
 import { CompositeOracle } from "./CompositeOracle";
 import { PropertyOracle } from "./PropertyOracle";
 import { AbstractRunner } from "../runners/AbstractRunner";
-import { isError } from "../../Util";
 
 /**
  * Generates diffs that show how adding particular property
@@ -55,7 +54,7 @@ export class CompositeJudgmentDiff {
     // Evaluate the property across the set of examples
     const propOracle = new PropertyOracle([runner]);
     for (const e of this._examples) {
-      e.addlJudgments[name] = propOracle.judge(e.example)[0];
+      e.addlJudgments[name] = propOracle.judge(unwrapResult(e.example))[0];
     }
 
     this._props.set(name, true);
@@ -100,9 +99,8 @@ export class CompositeJudgmentDiff {
             ...e.judgments.propertyDetail,
             ...props.map((p) => {
               const j = e.addlJudgments[p];
-              if (isError(j)) {
+              if (j.error) {
                 exceptions = true;
-                return "unknown";
               }
               return j;
             }),
@@ -123,8 +121,8 @@ export class CompositeJudgmentDiff {
          * but the same test execution no longer fails when the candidate assertion is added to
          * the test suite.
          */
-        oldJudgment === "fail" &&
-        newJudgment !== "fail"
+        oldJudgment.judgment === "fail" &&
+        newJudgment.judgment !== "fail"
       ) {
         counters.falsePasses.push(rejudgment);
       } else if (
@@ -133,9 +131,9 @@ export class CompositeJudgmentDiff {
          * test suite passes the test execution, but the test execution no longer passes when the
          * candidate assertion is added to the existing test suite.
          */
-        e.judgments.example !== "unknown" &&
-        oldJudgment === "pass" &&
-        newJudgment !== "pass"
+        e.judgments.example.judgment !== "unknown" &&
+        oldJudgment.judgment === "pass" &&
+        newJudgment.judgment !== "pass"
       ) {
         counters.falseFailures.push(rejudgment);
       } else if (
@@ -143,9 +141,9 @@ export class CompositeJudgmentDiff {
          * True Pass. A test execution where the expected output is known, and the test execution
          * passes before and after adding the candidate test assertion to the existing test suite.
          */
-        e.judgments.example !== "unknown" &&
-        oldJudgment === "pass" &&
-        newJudgment === "pass"
+        e.judgments.example.judgment !== "unknown" &&
+        oldJudgment.judgment === "pass" &&
+        newJudgment.judgment === "pass"
       ) {
         counters.truePasses.push(rejudgment);
       } else if (
@@ -154,9 +152,9 @@ export class CompositeJudgmentDiff {
          * execution fails before and after adding the candidate test assertion to the existing
          * test suite.
          */
-        e.judgments.example !== "unknown" &&
-        oldJudgment === "fail" &&
-        newJudgment === "fail"
+        e.judgments.example.judgment !== "unknown" &&
+        oldJudgment.judgment === "fail" &&
+        newJudgment.judgment === "fail"
       ) {
         counters.trueFailures.push(rejudgment);
       } else if (
@@ -164,9 +162,9 @@ export class CompositeJudgmentDiff {
          * Prospective Failure. The same as a false failure, except that the expected output
          * is unknown.
          */
-        e.judgments.example === "unknown" &&
-        oldJudgment === "pass" &&
-        newJudgment !== "pass"
+        e.judgments.example.judgment === "unknown" &&
+        oldJudgment.judgment === "pass" &&
+        newJudgment.judgment !== "pass"
       ) {
         counters.prospectiveFailures.push(rejudgment);
       }
@@ -269,16 +267,16 @@ export type JudgedExample = {
     testId: number;
   };
   judgments: {
-    composite: Judgment;
-    example: Judgment;
-    implicit: Judgment;
-    property: Judgment;
-    propertyDetail: Judgment[];
+    composite: NamedJudgment;
+    example: NamedJudgment;
+    implicit: NamedJudgment;
+    property: NamedJudgment;
+    propertyDetail: NamedJudgment[];
   };
-  addlJudgments: { [k: string]: Judgment | Error };
+  addlJudgments: { [k: string]: NamedJudgment };
 };
 
-export type RejudgedExample = JudgedExample & { rejudgment: Judgment };
+export type RejudgedExample = JudgedExample & { rejudgment: NamedJudgment };
 
 export type JudgmentDiff = {
   runId: string;

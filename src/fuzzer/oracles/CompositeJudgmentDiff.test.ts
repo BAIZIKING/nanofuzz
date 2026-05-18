@@ -3,10 +3,15 @@ import { CompositeJudgmentDiff, JudgedExample } from "./CompositeJudgmentDiff";
 
 describe("fuzzer.oracles.CompositeJudgmentDiff", () => {
   it("CompositeJudgmentDiff - base", () => {
+    const j = {
+      name: "dummy",
+      trace: [],
+      deciders: [],
+    };
     const examples: JudgedExample[] = [
       {
         example: {
-          in: [true],
+          inWrapped: [{ tag: "ArgValueTypeWrapped", value: true }],
           out: true,
           exception: false,
           timeout: false,
@@ -16,11 +21,11 @@ describe("fuzzer.oracles.CompositeJudgmentDiff", () => {
           testId: 0,
         },
         judgments: {
-          composite: "pass",
-          example: "pass",
-          implicit: "fail",
-          property: "unknown",
-          propertyDetail: ["pass"],
+          composite: { ...j, judgment: "pass" },
+          example: { ...j, judgment: "pass" },
+          implicit: { ...j, judgment: "fail" },
+          property: { ...j, judgment: "unknown" },
+          propertyDetail: [{ ...j, judgment: "pass" }],
         },
         addlJudgments: {},
       },

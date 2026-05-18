@@ -58,7 +58,7 @@ export function proposeProperties(
         exception: r.exception,
         timeout: r.timeout,
         out: r.output[0]?.value,
-        in: r.input.map((i) => ({
+        inWrapped: r.input.map((i) => ({
           tag: "ArgValueTypeWrapped",
           value: i.value,
         })),
