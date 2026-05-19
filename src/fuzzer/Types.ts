@@ -17,10 +17,13 @@ export type FuzzTestResult = {
   exceptionMessage?: string; // exception message if an exception was thrown
   stack?: string; // stack trace if an exception was thrown
   timeout: boolean; // true if the fn call timed out
-  passedImplicit: NamedJudgment; // "pass" if output passed implicit oracle
-  passedHuman: NamedJudgment; // "pass" if actual output matches human-expected output
-  passedValidator: NamedJudgment; // "pass" if passed all property oracles
-  passedValidators: NamedJudgment[]; // "pass" if passed all property oracles
+  oracles: {
+    composite: NamedJudgment;
+    implicit: NamedJudgment;
+    example: NamedJudgment;
+    property: NamedJudgment;
+    propertyDetail: NamedJudgment[];
+  };
   timers: {
     gen: number; // time to generate the input in ms
     run: number; // elapsed time of test in ms

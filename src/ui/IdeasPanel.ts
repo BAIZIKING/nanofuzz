@@ -68,14 +68,14 @@ export function proposeProperties(
         testId: r.testId,
       },
       judgments: {
-        implicit: r.passedImplicit,
-        example: r.passedHuman,
+        implicit: r.oracles.implicit,
+        example: r.oracles.example,
         composite: CompositeOracle.judge([
-          [r.passedHuman, r.passedValidator],
-          [r.passedImplicit],
+          [r.oracles.example, r.oracles.property],
+          [r.oracles.implicit],
         ]),
-        property: r.passedValidator,
-        propertyDetail: r.passedValidators,
+        property: r.oracles.property,
+        propertyDetail: r.oracles.propertyDetail,
       },
       addlJudgments: {},
     };

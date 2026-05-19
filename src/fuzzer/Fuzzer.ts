@@ -562,33 +562,33 @@ export class Tester {
         console.log(
           ` - Total tests where human validator passed: ${
             this._results.results.filter(
-              (e) => e.passedHuman.judgment === "pass"
+              (e) => e.oracles.example.judgment === "pass"
             ).length
           }, failed: ${
             this._results.results.filter(
-              (e) => e.passedHuman.judgment === "fail"
+              (e) => e.oracles.example.judgment === "fail"
             ).length
           }`
         );
         console.log(
           ` - Total tests where property validator passed: ${
             this._results.results.filter(
-              (e) => e.passedValidator.judgment === "pass"
+              (e) => e.oracles.property.judgment === "pass"
             ).length
           }, failed: ${
             this._results.results.filter(
-              (e) => e.passedValidator.judgment === "fail"
+              (e) => e.oracles.property.judgment === "fail"
             ).length
           }`
         );
         console.log(
           ` - Total tests where heuristic validator passed: ${
             this._results.results.filter(
-              (e) => e.passedImplicit.judgment === "pass"
+              (e) => e.oracles.implicit.judgment === "pass"
             ).length
           }, failed: ${
             this._results.results.filter(
-              (e) => e.passedImplicit.judgment === "fail"
+              (e) => e.oracles.implicit.judgment === "fail"
             ).length
           }`
         );
@@ -621,25 +621,33 @@ export class Tester {
         output: [],
         exception: false,
         timeout: false,
-        passedImplicit: {
-          name: "HeuristicOracle",
-          judgment: "unknown",
-          trace: [],
-          deciders: [],
+        oracles: {
+          composite: {
+            name: "CompositeOracle",
+            judgment: "unknown",
+            trace: [],
+            deciders: [],
+          },
+          implicit: {
+            name: "HeuristicOracle",
+            judgment: "unknown",
+            trace: [],
+            deciders: [],
+          },
+          example: {
+            name: "ExampleOracle",
+            judgment: "unknown",
+            trace: [],
+            deciders: [],
+          },
+          property: {
+            name: "PropertyOracle",
+            judgment: "unknown",
+            trace: [],
+            deciders: [],
+          },
+          propertyDetail: [],
         },
-        passedHuman: {
-          name: "ExampleOracle",
-          judgment: "unknown",
-          trace: [],
-          deciders: [],
-        },
-        passedValidator: {
-          name: "PropertyOracle",
-          judgment: "unknown",
-          trace: [],
-          deciders: [],
-        },
-        passedValidators: [],
         timers: {
           run: 0,
           gen: 0,
@@ -789,7 +797,7 @@ export class Tester {
       const startValTime = performance.now(); // start timer
       // IMPLICIT ORACLE --------------------------------------------
       if (this._options.useImplicit) {
-        result.passedImplicit = ImplicitOracle.judge(
+        result.oracles.implicit = ImplicitOracle.judge(
           result.timeout,
           result.exception,
           this._function.isVoid(),
@@ -800,7 +808,7 @@ export class Tester {
       // EXAMPLE ORACLE ---------------------------------------------
       // If a human annotated an expected output, then check it
       if (this._options.useHuman && result.expectedOutput) {
-        result.passedHuman = ExampleOracle.judge(
+        result.oracles.example = ExampleOracle.judge(
           result.timeout,
           result.exception,
           result.expectedOutput,
@@ -811,7 +819,7 @@ export class Tester {
       // PROPERTY ORACLE --------------------------------------------
       // If a property validator is selected, call it to evaluate the result
       if (this._options.useProperty) {
-        result.passedValidators = propertyOracle.judge(
+        result.oracles.propertyDetail = propertyOracle.judge(
           Object.freeze({
             in: result.input.map((i) => i.value), // inputs
             out:
@@ -824,10 +832,16 @@ export class Tester {
         );
 
         // Summarize property judgments
-        result.passedValidator = PropertyOracle.summarize(
-          result.passedValidators
+        result.oracles.property = PropertyOracle.summarize(
+          result.oracles.propertyDetail
         );
       } // if validator
+
+      // COMPOSITE ORACLE --------------------------------------------
+      result.oracles.composite = CompositeOracle.judge([
+        [result.oracles.property, result.oracles.example],
+        [result.oracles.implicit],
+      ]);
 
       // Validator stats
       const valTime = performance.now() - startValTime; // stop timer
@@ -1070,7 +1084,7 @@ export function getValidators(
  * @returns the category of the result
  */
 export function categorizeResult(result: FuzzTestResult): FuzzResultCategory {
-  if (result.passedValidator.error) {
+  if (result.oracles.property.error) {
     return "failure"; // Validator failed
   }
 
@@ -1092,12 +1106,8 @@ export function categorizeResult(result: FuzzTestResult): FuzzResultCategory {
   // https://doi.org/10.1145/3580446
   //
   // Subsequently, map the judgment to a FuzzResultCategory
-  switch (
-    CompositeOracle.judge([
-      [result.passedValidator, result.passedHuman],
-      [result.passedImplicit],
-    ]).judgment
-  ) {
+
+  switch (result.oracles.composite.judgment) {
     case "pass":
       return "ok";
     case "fail":

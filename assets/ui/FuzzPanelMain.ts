@@ -538,31 +538,31 @@ function main() {
       }
 
       // Implicit validation result
-      const passedImplicit = resultsData.env.options.useImplicit
-        ? { [implicitLabel]: e.passedImplicit }
+      const implicitOracle = resultsData.env.options.useImplicit
+        ? { [implicitLabel]: e.oracles.implicit }
         : {};
 
       // Human validation expectation and result
-      const passedHuman = resultsData.env.options.useHuman
-        ? { [correctLabel]: e.passedHuman }
+      const exampleOracle = resultsData.env.options.useHuman
+        ? { [correctLabel]: e.oracles.example }
         : {};
       const expectedOutput = resultsData.env.options.useHuman
         ? { [expectedLabel]: e.expectedOutput }
         : {};
 
       // Property validator summary ("pass" if passed all validator functions)
-      const passedValidator = resultsData.env.options.useProperty
-        ? { [validatorLabel]: e.passedValidator }
+      const propertyOracle = resultsData.env.options.useProperty
+        ? { [validatorLabel]: e.oracles.property }
         : {};
 
       // Array of all property validator results (array of bools, each is true if passed)
       // const allValidators = resultsData.env.options.useProperty
-      //   ? { [allValidatorsLabel]: e.passedValidators }
+      //   ? { [allValidatorsLabel]: e.oracles.properties }
       //   : {};
 
       // Result for each property validator ("pass"" if passed)
       const validatorFns: Record<string, NamedJudgment> = {};
-      e.passedValidators.forEach((j, i) => {
+      e.oracles.propertyDetail.forEach((j, i) => {
         validatorFns[validators[i]] = j;
       });
 
@@ -583,9 +583,9 @@ function main() {
         outputs[`output`] =
           o.value === undefined ? "undefined" : JSON5.stringify(o.value);
       });
-      if (e.passedValidator.error) {
+      if (e.oracles.property.error) {
         outputs[`output`] =
-          `(${e.passedValidator.deciders[0]?.name ?? "Validator"} exception) ${e.passedValidator.error.message}`;
+          `(${e.oracles.property.deciders[0]?.name ?? "Validator"} exception) ${e.oracles.property.error.message}`;
       } else if (e.exception) {
         outputs[`output`] = "(exception) " + e.exceptionMessage;
       }
@@ -607,12 +607,10 @@ function main() {
           ...src,
           ...inputs,
           ...outputs,
-          //...elapsedTimes,
-          ...passedImplicit,
-          ...passedValidator,
-          // ...allValidators,
+          ...implicitOracle,
+          ...propertyOracle,
           ...validatorFns,
-          ...passedHuman,
+          ...exampleOracle,
           ...pinned,
           ...expectedOutput,
         });
