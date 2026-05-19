@@ -448,10 +448,9 @@ export class IdeasPanelView {
                       <td class="topAlign">
                         <div class="editorFont judgmentTrace"><small>${traceJudgment(j.judgments.composite)}</small></div>
                       </td>
-                      <td class="topAlign">
+                      <td colspan="2" class="topAlign">
                         <div class="editorFont judgmentTrace"><small>${traceJudgment(j.rejudgment)}</small></div>
                       </td>
-                      <td></td>
                   </tr>`
                     )
                     .join("")}
