@@ -1372,7 +1372,10 @@ function handleColumnSort(
   // Sort current column value based on sort order
   const sortFn = (a: any, b: any, thisCol: string) => {
     const sortOrder = columnSortOrders[type][thisCol];
-    if (sortOrder !== FuzzSortOrder.desc && sortOrder !== FuzzSortOrder.asc) {
+    if (
+      (sortOrder !== FuzzSortOrder.desc && sortOrder !== FuzzSortOrder.asc) ||
+      hiddenColumns.includes(thisCol) // don't sort by hidden columns
+    ) {
       return 0; // no need to sort
     } else if (sortOrder === FuzzSortOrder.desc) {
       const temp = a;
