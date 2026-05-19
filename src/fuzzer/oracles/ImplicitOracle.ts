@@ -15,7 +15,7 @@ export class ImplicitOracle {
     outputValue: FuzzIoElement[]
   ): NamedJudgment {
     const j = {
-      name: "heuristic",
+      name: "HeuristicOracle",
       trace: [],
       deciders: [],
     };

@@ -1,10 +1,18 @@
 import * as JSON5 from "json5";
 import { htmlEscape } from "escape-goat";
 import { JudgmentDiff } from "../../src/fuzzer/oracles/CompositeJudgmentDiff";
-import { hide, isHidden, show, simpleToast, toggleHidden } from "./Util";
+import {
+  getElementByIdOrThrow,
+  hide,
+  isHidden,
+  show,
+  simpleToast,
+  toggleHidden,
+} from "./Util";
 import { FuzzPanelMessageFromWebView } from "../../src/ui/FuzzPanel";
 import { WebviewApi } from "vscode-webview";
 import { isError } from "../../src/Util";
+import { traceJudgment } from "../../src/ui/JudgmentTrace";
 
 // Ideas Grid
 export class IdeasPanelView {
@@ -182,7 +190,8 @@ export class IdeasPanelView {
     };
 
     /* body */
-    ideas.forEach((i) => {
+    ideas.forEach((i, ideaId) => {
+      const toggleHandlers: { attachTo: string; target: string }[] = [];
       /* summary row */
       const detailTr = document.createElement("tr");
       detailTr.id = `idea-${i.type}-${i.id}-detail`.replaceAll(".", "-");
@@ -347,7 +356,6 @@ export class IdeasPanelView {
               color: "red",
             })),
           ];
-
           td.innerHTML = /*html*/ `
             <div>Adding this property validator...
               <small>
@@ -414,7 +422,7 @@ export class IdeasPanelView {
                 <tbody>
                   ${jj
                     .map(
-                      (j) => /*html*/ `
+                      (j, jId) => /*html*/ `
                   <tr>
                     <td>
                       <span class="diffSummary">
@@ -433,7 +441,17 @@ export class IdeasPanelView {
                     <td class="editorFont">${htmlEscape(j.example.out === undefined ? "undefined" : JSON5.stringify(j.example.out))}</td>
                     <td class="editorFont removedLine">${j.judgments.composite.judgment}</td>
                     <td class="editorFont addedLine">${j.rejudgment.judgment}</td>
-                    <td class="colorColumn"><span><span title="more info" class="clickable codicon codicon-info"><!-- event handler !!!!!!!!!! --></span></span></td>
+                    <td class="colorColumn"><span><span id="idea-jTraceToggle-${ideaId}-${jId}" title="more info" class="clickable codicon codicon-info"><!-- event handler !!!!!!!!!! --></span></span></td>
+                  </tr>${toggleHandlers.push({ attachTo: `idea-jTraceToggle-${ideaId}-${jId}`, target: `idea-jTraceDetail-${ideaId}-${jId}` }) ? "" : ""}
+                  <tr id="idea-jTraceDetail-${ideaId}-${jId}" class="hidden">
+                      <td colspan="${this._inputNames.length + 2}"></td>
+                      <td class="topAlign">
+                        <div class="editorFont judgmentTrace"><small>${traceJudgment(j.judgments.composite)}</small></div>
+                      </td>
+                      <td class="topAlign">
+                        <div class="editorFont judgmentTrace"><small>${traceJudgment(j.rejudgment)}</small></div>
+                      </td>
+                      <td></td>
                   </tr>`
                     )
                     .join("")}
@@ -464,6 +482,14 @@ export class IdeasPanelView {
 
       detailTr.appendChild(td);
       tbody.appendChild(detailTr);
+
+      // Attach event handlers to judgment diffs
+      console.debug(`toggleHandlers length=${toggleHandlers.length}`); // !!!!!!!!!!
+      toggleHandlers.forEach((toggle) => {
+        getElementByIdOrThrow(toggle.attachTo).addEventListener("click", () => {
+          toggleHidden(getElementByIdOrThrow(toggle.target));
+        });
+      });
     });
 
     // flattem, sort, and filter the ideas

@@ -127,6 +127,10 @@ table.fuzzGrid {
 .fuzzGrid th:first-child {
   padding-left: 0;
 }
+.fuzzGrid td.topAlign,
+.fuzzGrid th.topAlign {
+  vertical-align: top;
+}
 .fuzzGrid th.spanning {
   text-align: center;
 }
@@ -641,4 +645,14 @@ p span.codicon {
 }
 #fuzzBusyMessage {
   font-size: 0.9em;
+}
+.judgmentTrace pre {
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 0.75em;
+  margin-bottom: 0;
+  margin-top: 0;
+}
+.judgmentTrace pre.outer {
+  padding-left: 0;
 }

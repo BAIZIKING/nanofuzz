@@ -95,6 +95,7 @@ export class CompositeJudgmentDiff {
       let exceptions = false;
       const newJudgment = CompositeOracle.judge([
         [
+          e.judgments.example,
           PropertyOracle.summarize([
             ...e.judgments.propertyDetail,
             ...props.map((p) => {
@@ -105,7 +106,6 @@ export class CompositeJudgmentDiff {
               return j;
             }),
           ]),
-          e.judgments.example,
         ],
         [e.judgments.implicit],
       ]);
