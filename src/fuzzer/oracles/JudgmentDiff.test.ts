@@ -1,5 +1,5 @@
 import { RunnerFactory } from "../runners/RunnerFactory";
-import { CompositeJudgmentDiff, JudgedExample } from "./CompositeJudgmentDiff";
+import { CompositeJudgmentDiff, JudgedExample } from "./JudgmentDiff";
 
 describe("fuzzer.oracles.CompositeJudgmentDiff", () => {
   it("CompositeJudgmentDiff - base", () => {
@@ -12,11 +12,12 @@ describe("fuzzer.oracles.CompositeJudgmentDiff", () => {
       {
         example: {
           inWrapped: [{ tag: "ArgValueTypeWrapped", value: true }],
-          out: true,
+          outWrapped: { tag: "ArgValueTypeWrapped", value: true },
           exception: false,
           timeout: false,
         },
         source: {
+          type: "test",
           runId: "dummy-uuid",
           testId: 0,
         },

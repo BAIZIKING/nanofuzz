@@ -6,10 +6,7 @@ import { AbstractRunner } from "../runners/AbstractRunner";
 
 /**
  * Generates diffs that show how adding particular property
- * assertions to the test suite would change the test suite's
- * judgments.
- *
- *
+ * assertions to the test suite would change existing judgments.
  */
 export class CompositeJudgmentDiff {
   protected _runId: string;
@@ -260,9 +257,13 @@ export class CompositeJudgmentDiff {
   } // fn: prioritize
 } // class: CompositeJudgmentDiff
 
+// !!!!!!
 export type JudgedExample = {
   example: ResultWrapped;
   source: {
+    type:
+      | "test" // concrete example from test suite
+      | "mutation"; // mutation for evaluating judgments
     runId: string;
     testId: number;
   };

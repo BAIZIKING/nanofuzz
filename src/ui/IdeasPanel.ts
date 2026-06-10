@@ -6,7 +6,7 @@ import { FunctionDef, FuzzTestResults, ProgramDef } from "../fuzzer/Fuzzer";
 import {
   CompositeJudgmentDiff,
   JudgedExample,
-} from "../fuzzer/oracles/CompositeJudgmentDiff";
+} from "../fuzzer/oracles/JudgmentDiff";
 import { RunnerFactory } from "../fuzzer/runners/RunnerFactory";
 import path from "node:path";
 import { CompositeOracle } from "../fuzzer/oracles/CompositeOracle";
