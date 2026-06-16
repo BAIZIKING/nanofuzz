@@ -33,7 +33,7 @@ To use NaNofuzz in your own projects:
 NaNofuzz is an **experimental** testing platform developed by the Accelerated Testing Research Program at Carnegie Mellon University's School of Computer Science. While NaNofuzz is **not** intended for production use, contributions are welcome to address the limitations below. 
 
 NaNofuzz supports exported standard and arrow functions with any mixture of the following parameter types:
- - Numbers (integers and floats, signed and unsigned)
+ - Numbers (integers and floats)
  - Strings
  - Booleans
  - Literal object types

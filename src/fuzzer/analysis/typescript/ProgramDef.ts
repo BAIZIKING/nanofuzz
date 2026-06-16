@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/switch-exhaustiveness-check */
 import * as JSON5 from "json5";
 import { ArgDef } from "./ArgDef";
 import { FunctionDef } from "./FunctionDef";

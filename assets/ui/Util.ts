@@ -22,10 +22,6 @@ export function getElementByIdWithTypeOrThrow<T extends HTMLElement>(
   return element;
 }
 
-export function assertNonreachable(x: never): never {
-  throw new Error(`Non-reachable code executed: ${x}`);
-}
-
 /**
  * Returns true if the DOM node is hidden using the 'hidden' class.
  *

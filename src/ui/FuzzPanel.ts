@@ -2730,6 +2730,8 @@ ${src}`;
       );
     } else {
       typeString = htmlEscape(argType.toLowerCase());
+
+      // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
       switch (argType) {
         case fuzzer.ArgTag.OBJECT:
           typeString = "Object";
@@ -2761,6 +2763,7 @@ ${src}`;
     }
 
     let sep: string;
+    // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (argType) {
       case fuzzer.ArgTag.LITERAL:
         sep = endSep;
@@ -2914,6 +2917,15 @@ ${src}`;
         html += `</div>`;
         break;
       }
+
+      case fuzzer.ArgTag.LITERAL:
+        // A literal typed input has only one possible value
+        break;
+
+      case fuzzer.ArgTag.UNRESOLVED:
+        throw new Error(
+          `Cannot render an unresolved argument definition as an HTML form.`
+        );
     }
 
     // For objects & unions: output the array settings
@@ -3329,6 +3341,7 @@ function _applyArgOverrides(
     }
 
     // Min and max values
+    // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (thisArg.getType()) {
       case fuzzer.ArgTag.NUMBER:
         if (thisOverride.number) {

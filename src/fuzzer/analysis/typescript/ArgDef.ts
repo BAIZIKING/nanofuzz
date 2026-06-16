@@ -182,7 +182,7 @@ export class ArgDef<T extends ArgType> {
       case ArgTag.NUMBER:
         return [
           {
-            min: options.numSigned ? -100 : 0,
+            min: 0,
             max: 100,
           },
         ];
@@ -199,7 +199,7 @@ export class ArgDef<T extends ArgType> {
       case ArgTag.LITERAL:
       case ArgTag.UNION:
         return [];
-      default:
+      case ArgTag.UNRESOLVED:
         throw new Error(`Unsupported type: ${type}`);
     }
   } // fn: getDefaultIntervals()
@@ -480,6 +480,7 @@ export class ArgDef<T extends ArgType> {
       return this.typeRef;
     }
 
+    // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (this.type) {
       case ArgTag.OBJECT: {
         // Literal object, no type. Recursively walk
@@ -548,9 +549,9 @@ export class ArgDef<T extends ArgType> {
   } // fn: getTypeAnnotation()
 
   /**
-   * Returns the default option set for signed integer values.
+   * Returns the default option set.
    *
-   * @returns the default option set for signed integer values
+   * @returns the default option set
    */
   public static getDefaultOptions(): ArgOptions {
     return {
@@ -571,9 +572,6 @@ export class ArgDef<T extends ArgType> {
       numInteger: vscode.workspace
         .getConfiguration("nanofuzz.argdef")
         .get("numInteger", true),
-      numSigned: vscode.workspace
-        .getConfiguration("nanofuzz.argdef")
-        .get("numSigned", false),
 
       // `Any` defaults
       anyType: vscode.workspace
@@ -595,18 +593,6 @@ export class ArgDef<T extends ArgType> {
       dimLength: [],
     };
   } // fn: getDefaultOptions()
-
-  /**
-   * Returns the default option set for signed float values.
-   *
-   * @returns the default option set for signed float values
-   */
-  public static getDefaultFloatOptions(): ArgOptions {
-    return {
-      ...ArgDef.getDefaultOptions(),
-      numInteger: false,
-    };
-  } // fn: getDefaultFloatOptions()
 
   /**
    * Accepts an option set and returns true if it is valid; false otherwise.

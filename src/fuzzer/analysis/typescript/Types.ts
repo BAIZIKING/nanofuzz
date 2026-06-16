@@ -107,7 +107,6 @@ export type ArgOptions = {
 
   // For type number
   numInteger: boolean; // true if the numeric argument input is an integer
-  numSigned: boolean; // true if the numeric argument input is signed
 
   // For type any
   anyType: ArgTag; // the type to interpret for 'any' types
@@ -135,7 +134,6 @@ export type ArgOptionOverrides = {
  */
 export type ArgOptionOverride = {
   numInteger?: boolean;
-  numSigned?: boolean;
   numIntervals?: Interval<number>[];
   dimLength?: Interval<number>[];
   strLength?: Interval<number>;
