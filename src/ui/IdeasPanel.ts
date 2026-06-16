@@ -2,7 +2,14 @@ import JSON5 from "json5";
 import * as vscode from "vscode";
 import * as zod from "zod";
 import { LlmAdapter } from "../fuzzer/adapters/LlmAdapter";
-import { FunctionDef, FuzzTestResults, ProgramDef } from "../fuzzer/Fuzzer";
+import {
+  FunctionDef,
+  FuzzIoElement,
+  FuzzTestResults,
+  ProgramDef,
+  ResultWrapped,
+  unwrapResult,
+} from "../fuzzer/Fuzzer";
 import {
   CompositeJudgmentDiff,
   JudgedExample,
@@ -11,6 +18,14 @@ import { RunnerFactory } from "../fuzzer/runners/RunnerFactory";
 import path from "node:path";
 import { CompositeOracle } from "../fuzzer/oracles/CompositeOracle";
 import { FuzzPanelMessageToWebView } from "./FuzzPanel";
+import { NamedJudgment } from "../fuzzer/oracles/Types";
+import { ImplicitOracle } from "../fuzzer/oracles/ImplicitOracle";
+import { ArgDefMutator } from "../fuzzer/analysis/typescript/ArgDefMutator";
+import seedrandom from "seedrandom";
+import { ExampleOracle } from "../fuzzer/oracles/ExampleOracle";
+import { ArgDefGenerator } from "../fuzzer/analysis/typescript/ArgDefGenerator";
+import { PropertyOracle } from "../fuzzer/oracles/PropertyOracle";
+import { propertyOracleFromNodeModule } from "../fuzzer/oracles/Util";
 
 let _isBusy: boolean = false;
 const model = new LlmAdapter();
@@ -34,10 +49,13 @@ const schema = zod
   .toJSONSchema();
 
 // !!!!!!
+// !!!!!!!!!! This should not be in the IdeasPanel class
 export function proposeProperties(
   webview: vscode.Webview,
+  module: NodeJS.Module,
   fn: FunctionDef,
-  results: FuzzTestResults
+  results: FuzzTestResults,
+  prng: seedrandom.prng | undefined = seedrandom()
 ): void {
   if (
     _isBusy ||
@@ -52,18 +70,29 @@ export function proposeProperties(
     _isBusy = true;
   }
 
-  const examples: JudgedExample[] = results.results.map((r) => {
+  const outputSpec = fn.getReturnArg();
+  const outputGenerator = outputSpec
+    ? new ArgDefGenerator([outputSpec], prng)
+    : undefined;
+  const propertyOracle: PropertyOracle = propertyOracleFromNodeModule(
+    module,
+    results.env.validators.map((f) => f.name)
+  );
+
+  // Concrete examples actually tested
+  const concreteExamples: JudgedExample[] = results.results.map((r) => {
     return {
       example: {
         exception: r.exception,
         timeout: r.timeout,
-        out: r.output[0]?.value,
+        outWrapped: { tag: "ArgValueTypeWrapped", value: r.output[0].value },
         inWrapped: r.input.map((i) => ({
           tag: "ArgValueTypeWrapped",
           value: i.value,
         })),
       },
       source: {
+        type: "test",
         runId: results.runId,
         testId: r.testId,
       },
@@ -80,6 +109,138 @@ export function proposeProperties(
       addlJudgments: {},
     };
   });
+
+  // Mutate outputs of examples with a ground truth example assertion
+  const mutatedExamples: JudgedExample[] = outputSpec
+    ? results.results
+        .filter(
+          (r) => r.expectedOutput && r.oracles.example.judgment !== "unknown"
+        )
+        .map((r) => {
+          const mutants: ResultWrapped[] = [];
+
+          // Synthesize an exception example
+          if (!r.exception) {
+            mutants.push({
+              exception: true,
+              timeout: false,
+              inWrapped: r.input.map((i) => ({
+                tag: "ArgValueTypeWrapped",
+                value: i.value,
+              })),
+              outWrapped: {
+                tag: "ArgValueTypeWrapped",
+                value: undefined,
+              },
+            });
+          }
+
+          // Synthesize a timeout example
+          if (!r.timeout) {
+            mutants.push({
+              exception: false,
+              timeout: true,
+              inWrapped: r.input.map((i) => ({
+                tag: "ArgValueTypeWrapped",
+                value: i.value,
+              })),
+              outWrapped: {
+                tag: "ArgValueTypeWrapped",
+                value: undefined,
+              },
+            });
+          }
+
+          // Synthesize a mutant example if we have an output spec
+          if (outputGenerator) {
+            try {
+              mutants.push({
+                exception: false,
+                timeout: false,
+                inWrapped: r.input.map((i) => ({
+                  tag: "ArgValueTypeWrapped",
+                  value: i.value,
+                })),
+                outWrapped:
+                  r.output[0]?.value === undefined
+                    ? outputGenerator.next()[0]
+                    : ArgDefMutator.mutate(
+                        [outputSpec],
+                        [
+                          {
+                            tag: "ArgValueTypeWrapped",
+                            value: r.output[0]?.value,
+                          },
+                        ],
+                        prng
+                      )[0],
+              });
+            } catch (_e: unknown) {
+              // Not able to mutate; move on
+            }
+          }
+
+          return mutants.map((m) => {
+            const mutatedOutput: FuzzIoElement[] = [
+              {
+                ...r.output[0],
+                isException: m.exception,
+                isTimeout: m.timeout,
+                origin: {
+                  type: "unknown", // !!!!!!!!!!
+                },
+                value: m.outWrapped.value,
+              },
+            ];
+            const implicitJudgment: NamedJudgment = results.env.options
+              .useImplicit
+              ? ImplicitOracle.judge(
+                  m.timeout,
+                  m.exception,
+                  fn.isVoid(),
+                  mutatedOutput
+                )
+              : ImplicitOracle.unknown;
+            const exampleJudgment: NamedJudgment =
+              results.env.options.useHuman && r.expectedOutput
+                ? ExampleOracle.judge(
+                    m.timeout,
+                    m.exception,
+                    r.expectedOutput,
+                    mutatedOutput
+                  )
+                : ExampleOracle.unknown;
+            const propertyJudgmentDetail = propertyOracle.judge(
+              unwrapResult(m)
+            );
+            const propertyJudgment = PropertyOracle.summarize(
+              propertyJudgmentDetail
+            );
+            const compositeJudgment = CompositeOracle.judge([
+              [exampleJudgment, propertyJudgment],
+              [implicitJudgment],
+            ]);
+            const mutatedExample: JudgedExample = {
+              example: m,
+              source: {
+                type: "mutation",
+                runId: results.runId,
+                testId: r.testId,
+              },
+              judgments: {
+                implicit: implicitJudgment,
+                example: exampleJudgment,
+                property: propertyJudgment,
+                propertyDetail: propertyJudgmentDetail,
+                composite: compositeJudgment,
+              },
+              addlJudgments: {},
+            };
+            return mutatedExample;
+          });
+        })
+        .flat()
+    : [];
 
   // Generate & diff the candidate property judgments
   model.genProps(fn, schema).then((props) => {
@@ -109,7 +270,7 @@ export function proposeProperties(
 
     const differ = new CompositeJudgmentDiff(
       results.runId,
-      examples,
+      [...concreteExamples, ...mutatedExamples],
       props.map((p) => {
         console.debug(`creating jsrunner for ${p.functionName}`); // !!!!!!!!!!!
         return {
@@ -132,12 +293,12 @@ export function proposeProperties(
     props.forEach((p) => {
       console.debug(`---------------------`); // !!!!!!!!!!
       const diff = differ.diffFor([p.functionName]);
-      if (diff.priority > 0) {
-        message.props[p.functionName] = {
-          src: p.functionSourceCode,
-          diffSerialized: JSON5.stringify(diff),
-        };
-      }
+      // !!!!!!!!!!!!if (diff.priority > 0) {
+      message.props[p.functionName] = {
+        src: p.functionSourceCode,
+        diffSerialized: JSON5.stringify(diff),
+      };
+      //}
       console.debug(
         `diff for "${p.functionName}": ${JSON5.stringify(
           {

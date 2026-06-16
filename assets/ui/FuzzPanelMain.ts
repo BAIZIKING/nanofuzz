@@ -4,6 +4,8 @@ import {
   getElementByIdOrThrow,
   getElementByIdWithTypeOrThrow,
   hide,
+  htmlEscape,
+  htmlUnescape,
   isHidden,
   show,
   toggleHidden,
@@ -30,7 +32,7 @@ import {
   FuzzPanelMessageFromWebView,
   FuzzPanelPinMessage,
 } from "../../src/ui/FuzzPanel";
-import { JudgmentDiff } from "../../src/fuzzer/oracles/CompositeJudgmentDiff";
+import { JudgmentDiff } from "../../src/fuzzer/oracles/JudgmentDiff";
 import { IdeasPanelView } from "./IdeasPanelView";
 
 const vscode = acquireVsCodeApi();
@@ -2499,37 +2501,3 @@ function listForValidatorFnTooltip(validatorList: string[]) {
 function getIdBase(i: number) {
   return "argDef-" + i;
 } // fn: getIdBase()
-
-/**
- * Adapted from: escape-goat/index.js
- *
- * Unescapes an HTML string.
- *
- * @param html HTML to unescape
- * @returns unescaped string
- */
-function htmlUnescape(html: string) {
-  return html
-    .replace(/&gt;/g, ">")
-    .replace(/&lt;/g, "<")
-    .replace(/&#0?39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&");
-} // fn: htmlUnescape()
-
-/**
- * Adapted from: escape-goat/index.js
- *
- * Escapes a string for use in HTML.
- *
- * @param str string to escape
- * @returns escaped string
- */
-function htmlEscape(str: string) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-} // fn: htmlEscape()

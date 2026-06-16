@@ -40,6 +40,18 @@ export class ImplicitOracle {
       };
     }
   } // fn: judge
+
+  /**
+   * Getter for default unknown judgment
+   */
+  public static get unknown(): NamedJudgment {
+    return {
+      name: "HeuristicOracle",
+      judgment: "unknown",
+      trace: [],
+      deciders: [],
+    };
+  } // property: get unknown
 } // class: ImplicitOracle
 
 /**

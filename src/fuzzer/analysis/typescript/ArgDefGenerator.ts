@@ -36,7 +36,7 @@ export class ArgDefGenerator {
    */
   public next(): ArgValueTypeWrapped[] {
     return this._gens.map((e) => {
-      return { value: e() };
+      return { tag: "ArgValueTypeWrapped", value: e() };
     });
   } // fn: next
 

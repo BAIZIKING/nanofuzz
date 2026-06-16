@@ -38,7 +38,7 @@ export type FuzzTestResult = {
  */
 export type Result = {
   in: ArgValueType[]; // function input
-  out: unknown; // function output
+  out: ArgValueType; // function output
   exception: boolean; // true if an exception was thrown
   timeout: boolean; // true if the fn call timed out
 };
@@ -48,7 +48,7 @@ export type Result = {
  */
 export type ResultWrapped = {
   inWrapped: ArgValueTypeWrapped[]; // function input
-  out: unknown; // function output
+  outWrapped: ArgValueTypeWrapped; // function output
   exception: boolean; // true if an exception was thrown
   timeout: boolean; // true if the fn call timed out
 };
@@ -56,7 +56,7 @@ export type ResultWrapped = {
 export function wrapResult(r: Result): ResultWrapped {
   return {
     inWrapped: r.in.map((i) => ({ tag: "ArgValueTypeWrapped", value: i })),
-    out: r.out,
+    outWrapped: { tag: "ArgValueTypeWrapped", value: r.out },
     exception: r.exception,
     timeout: r.timeout,
   };
@@ -64,7 +64,7 @@ export function wrapResult(r: Result): ResultWrapped {
 export function unwrapResult(r: ResultWrapped): Result {
   return {
     in: r.inWrapped.map((i) => i.value),
-    out: r.out,
+    out: r.outWrapped.value,
     exception: r.exception,
     timeout: r.timeout,
   };

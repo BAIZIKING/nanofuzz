@@ -39,4 +39,16 @@ export class CompositeOracle {
     }
     return { ...cj, judgment: "pass" }; // default case: no contrary judgments
   } //fn: judge
+
+  /**
+   * Getter for default unknown judgment
+   */
+  public static get unknown(): NamedJudgment {
+    return {
+      name: "CompositeOracle",
+      judgment: "unknown",
+      trace: [],
+      deciders: [],
+    };
+  } // property: get unknown
 } // class: CompositeOracle

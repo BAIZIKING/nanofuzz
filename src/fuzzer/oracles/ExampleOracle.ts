@@ -55,4 +55,16 @@ export class ExampleOracle {
       };
     }
   } // fn: judge
+
+  /**
+   * Getter for default unknown judgment
+   */
+  public static get unknown(): NamedJudgment {
+    return {
+      name: "ExampleOracle",
+      judgment: "unknown",
+      trace: [],
+      deciders: [],
+    };
+  } // property: get unknown
 } // class: ExampleOracle

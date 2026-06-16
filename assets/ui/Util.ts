@@ -90,4 +90,40 @@ export function simpleToast(msg: string): void {
   setTimeout(async () => {
     snackbar.remove();
   }, 4000);
-} // !!!!!!
+} // fn: simpleToast
+
+/**
+ * Adapted from: escape-goat/index.js
+ *
+ * Unescapes an HTML string.
+ *
+ * @param html HTML to unescape
+ * @returns unescaped string
+ */
+export function htmlUnescape(html: string) {
+  return html
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&#0?39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+} // fn: htmlUnescape()
+
+/**
+ * Adapted from: escape-goat/index.js
+ *
+ * Escapes a string for use in HTML.
+ *
+ * @param str string to escape
+ * @returns escaped string
+ */
+export function htmlEscape(str: string) {
+  return str === undefined
+    ? "undefined"
+    : str
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+} // fn: htmlEscape()

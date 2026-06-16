@@ -1250,6 +1250,7 @@ ${src}`;
               setTimeout(() => {
                 proposeProperties(
                   this._panel.webview,
+                  this._tester.getModule(),
                   this._fuzzEnv.function,
                   result
                 );

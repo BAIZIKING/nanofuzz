@@ -109,4 +109,16 @@ export class PropertyOracle {
     }
     return summary;
   } // fn: summarize
-}
+
+  /**
+   * Getter for default unknown judgment
+   */
+  public static get unknown(): NamedJudgment {
+    return {
+      name: "PropertyOracle",
+      judgment: "unknown",
+      trace: [],
+      deciders: [],
+    };
+  } // property: get unknown
+} // class: PropertyOracle

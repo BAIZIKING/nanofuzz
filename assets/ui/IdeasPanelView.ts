@@ -1,9 +1,9 @@
 import * as JSON5 from "json5";
-import { htmlEscape } from "escape-goat";
-import { JudgmentDiff } from "../../src/fuzzer/oracles/CompositeJudgmentDiff";
+import { JudgmentDiff } from "../../src/fuzzer/oracles/JudgmentDiff";
 import {
   getElementByIdOrThrow,
   hide,
+  htmlEscape,
   isHidden,
   show,
   simpleToast,
@@ -438,7 +438,15 @@ export class IdeasPanelView {
                           : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.inWrapped[i].value))}</span></td>`
                       )
                       .join("\n")}
-                    <td class="editorFont">${htmlEscape(j.example.out === undefined ? "undefined" : JSON5.stringify(j.example.out))}</td>
+                    <td class="editorFont">${
+                      j.example.timeout
+                        ? "(timeout)"
+                        : j.example.exception
+                          ? "(exception)"
+                          : htmlEscape(
+                              JSON5.stringify(j.example.outWrapped.value)
+                            )
+                    }</td>
                     <td class="editorFont removedLine">${j.judgments.composite.judgment}</td>
                     <td class="editorFont addedLine">${j.rejudgment.judgment}</td>
                     <td class="colorColumn"><span><span id="idea-jTraceToggle-${ideaId}-${jId}" title="more info" class="clickable codicon codicon-info"><!-- event handler !!!!!!!!!! --></span></span></td>
@@ -502,7 +510,9 @@ export class IdeasPanelView {
   }
 }
 
-type Idea = {
+type Idea = PropertyIdea; // !!!!!!!!!! other ideas here
+
+type PropertyIdea = {
   type: "property.suggestion";
   id: string;
   priority: number;

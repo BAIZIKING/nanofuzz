@@ -27,6 +27,7 @@ import { CompositeOracle } from "./oracles/CompositeOracle";
 import { ImplicitOracle } from "./oracles/ImplicitOracle";
 import { ExampleOracle } from "./oracles/ExampleOracle";
 import { PropertyOracle } from "./oracles/PropertyOracle";
+import { propertyOracleFromNodeModule } from "./oracles/Util";
 
 export class Tester {
   protected _module: string; // module filename
@@ -289,6 +290,17 @@ export class Tester {
   } // property: get state
 
   /**
+   * Returns the current module and compiles it if necessary
+   */
+  public getModule(
+    update: (payload: FuzzBusyStatusMessage) => void = () => {}
+  ): NodeJS.Module {
+    const fqSrcFile = fs.realpathSync(this._function.getModule()); // Help the module loader
+    this._lastCompiler = new compiler.TypeScriptCompiler(fqSrcFile);
+    return this._lastCompiler.compileSync(this._measures, update);
+  } // property: get module
+
+  /**
    * Runs the tester in sync mode and returns its results.
    *
    * @param `injectTests` tests to inject
@@ -465,10 +477,8 @@ export class Tester {
 
     // The target will be a TypeScript function, so we must compile
     // it to JavaScript (and possibly instrument it) prior to execution.
-    const fqSrcFile = fs.realpathSync(this._function.getModule()); // Help the module loader
     const startCompTime = performance.now(); // start time: compile & instrument
-    this._lastCompiler = new compiler.TypeScriptCompiler(fqSrcFile);
-    const mod = this._lastCompiler.compileSync(this._measures, update);
+    const mod = this.getModule(update);
     this._results.stats.timers.compile = performance.now() - startCompTime;
 
     // Build a test runner for executing tests
@@ -478,15 +488,10 @@ export class Tester {
       fnName: this._function.getName(),
     });
 
-    // Build runners for the property validators
-    const propertyOracle = new PropertyOracle(
-      this._validators.map((vFnRef) =>
-        RunnerFactory({
-          type: "NodeJS.Module",
-          module: mod,
-          fnName: vFnRef.name,
-        })
-      )
+    // Build the property oracle, which contains runners
+    const propertyOracle = propertyOracleFromNodeModule(
+      mod,
+      this._validators.map((v) => v.name)
     );
 
     // Are we currently injecting inputs?
@@ -622,30 +627,10 @@ export class Tester {
         exception: false,
         timeout: false,
         oracles: {
-          composite: {
-            name: "CompositeOracle",
-            judgment: "unknown",
-            trace: [],
-            deciders: [],
-          },
-          implicit: {
-            name: "HeuristicOracle",
-            judgment: "unknown",
-            trace: [],
-            deciders: [],
-          },
-          example: {
-            name: "ExampleOracle",
-            judgment: "unknown",
-            trace: [],
-            deciders: [],
-          },
-          property: {
-            name: "PropertyOracle",
-            judgment: "unknown",
-            trace: [],
-            deciders: [],
-          },
+          composite: CompositeOracle.unknown,
+          implicit: ImplicitOracle.unknown,
+          example: ExampleOracle.unknown,
+          property: PropertyOracle.unknown,
           propertyDetail: [],
         },
         timers: {
