@@ -574,7 +574,8 @@ div.fuzzInputControlGroup {
 }
 
 /* VS Code icons in paragraphs should be the size of normal text */
-p span.codicon {
+p span.codicon,
+span.codicon.inline {
   font-size: var(--vscode-font-size) !important;
 }
 

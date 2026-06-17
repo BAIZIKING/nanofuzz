@@ -1,3 +1,5 @@
+import { Judgment } from "../../src/fuzzer/oracles/Types";
+
 export function getElementByIdOrThrow(id: string): HTMLElement {
   const element = document.getElementById(id);
   if (!element) {
@@ -62,6 +64,19 @@ export function hide(e: Element) {
 export function show(e: Element) {
   e.classList.remove("hidden");
 } // fn: show()
+
+/**
+ * Returns a judgment icon for a given judgment.
+ *
+ * @param j judgment
+ * @param inline if false, do not create an icon for inlining in text
+ * @returns HTML representing a judgment icon
+ */
+export function judgmentToIcon(j: Judgment, inline: boolean = true): string {
+  return `<span><span class="codicon codicon-${
+    j === "pass" ? "pass" : j === "fail" ? "error" : "circle"
+  }${inline ? " inline" : ""}"></span></span>`;
+}
 
 // !!!!!!
 export function simpleToast(msg: string): void {

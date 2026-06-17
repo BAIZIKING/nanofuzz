@@ -5,6 +5,7 @@ import {
   hide,
   htmlEscape,
   isHidden,
+  judgmentToIcon,
   show,
   simpleToast,
   toggleHidden,
@@ -438,7 +439,7 @@ export class IdeasPanelView {
                           : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.inWrapped[i].value))}</span></td>`
                       )
                       .join("\n")}
-                    <td class="editorFont">${
+                    <td class="editorFont"><span>${j.source.type === "mutation" ? `<span class="codicon codicon-bug inline" title="Mutated/buggy program test output">` : `<span class="codicon codicon-beaker inline" title="Actual program test output">`}</span></span><span> ${
                       j.example.timeout
                         ? "(timeout)"
                         : j.example.exception
@@ -447,9 +448,9 @@ export class IdeasPanelView {
                               JSON5.stringify(j.example.outWrapped.value)
                             )
                     }</td>
-                    <td class="editorFont removedLine">${j.judgments.composite.judgment}</td>
-                    <td class="editorFont addedLine">${j.rejudgment.judgment}</td>
-                    <td class="colorColumn"><span><span id="idea-jTraceToggle-${ideaId}-${jId}" title="more info" class="clickable codicon codicon-info"><!-- event handler !!!!!!!!!! --></span></span></td>
+                    <td class="editorFont removedLine">${judgmentToIcon(j.judgments.composite.judgment)} ${j.judgments.composite.judgment}</td>
+                    <td class="editorFont addedLine">${judgmentToIcon(j.rejudgment.judgment)} ${j.rejudgment.judgment}</td>
+                    <td class="colorColumn"><span><span id="idea-jTraceToggle-${ideaId}-${jId}" title="more info" class="clickable codicon codicon-info"></span></span></td>
                   </tr>${toggleHandlers.push({ attachTo: `idea-jTraceToggle-${ideaId}-${jId}`, target: `idea-jTraceDetail-${ideaId}-${jId}` }) ? "" : ""}
                   <tr id="idea-jTraceDetail-${ideaId}-${jId}" class="hidden">
                       <td colspan="${this._inputNames.length + 2}"></td>
