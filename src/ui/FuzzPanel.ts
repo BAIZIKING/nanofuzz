@@ -16,7 +16,7 @@ import {
 import { normalizePathForKey } from "../fuzzer/Util";
 import { CodeCoverageMeasureStats } from "../fuzzer/measures/CoverageMeasure";
 import { getPropertyTestSkeleton } from "../fuzzer/analysis/typescript/Util";
-import { proposeProperties } from "./IdeasPanel";
+import { proposeProperties } from "./IdeasPanelController";
 
 /**
  * FuzzPanel displays fuzzer options, actions, and the last results for a
