@@ -390,7 +390,7 @@ export class IdeasPanelView {
                         )
                         .join("\n")}
                       <td class="editorFont">${htmlEscape(
-                        getExceptionMsg(e.addlJudgments[i.prop.name])
+                        getExceptionMsg(e.addlJudgments[i.prop.name].error)
                       )}
                       </td>
                     </tr>`
