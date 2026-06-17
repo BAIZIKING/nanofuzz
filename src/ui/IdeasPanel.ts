@@ -6,7 +6,6 @@ import {
   FunctionDef,
   FuzzIoElement,
   FuzzTestResults,
-  ProgramDef,
   ResultWrapped,
   unwrapResult,
 } from "../fuzzer/Fuzzer";
@@ -26,6 +25,7 @@ import { ExampleOracle } from "../fuzzer/oracles/ExampleOracle";
 import { ArgDefGenerator } from "../fuzzer/analysis/typescript/ArgDefGenerator";
 import { PropertyOracle } from "../fuzzer/oracles/PropertyOracle";
 import { propertyOracleFromNodeModule } from "../fuzzer/oracles/Util";
+import { isError } from "../Util";
 
 let _isBusy: boolean = false;
 const model = new LlmAdapter();
@@ -245,35 +245,13 @@ export function proposeProperties(
   // Generate & diff the candidate property judgments
   model.genProps(fn, schema).then((props) => {
     console.debug(
-      `In the post-llm handler with: ${JSON5.stringify(props, null, 2)}`
+      `In the post-llm handler w/${concreteExamples.length} concrete example(s), ${mutatedExamples.length} mutated example(s), and these props:: ${JSON5.stringify(props, null, 2)}`
     ); // !!!!!!!!!!
-    // Check that we can parse the generated property and it is a validator for the PUT
-    props.filter((prop) => {
+    const propRunners: ConstructorParameters<typeof CompositeJudgmentDiff>[2] =
+      [];
+    props.forEach((p) => {
       try {
-        const propFns = ProgramDef.fromSource(() =>
-          prop.functionSourceCode.join("\n")
-        ).getFunctions();
-        if (prop.functionName in propFns) {
-          const vFn = propFns[prop.functionName];
-          return (
-            vFn.isValidator() && vFn.getValidatorTargetName() === fn.getName()
-          );
-        }
-      } catch (_e: unknown) {
-        console.debug(
-          `Exception parsing generated validator: ${prop.functionName}. Src: ${prop.functionSourceCode}`
-        );
-        return false;
-      }
-      return false;
-    });
-
-    const differ = new CompositeJudgmentDiff(
-      results.runId,
-      [...concreteExamples, ...mutatedExamples],
-      props.map((p) => {
-        console.debug(`creating jsrunner for ${p.functionName}`); // !!!!!!!!!!!
-        return {
+        propRunners.push({
           name: p.functionName,
           runner: RunnerFactory({
             type: "typescript.src",
@@ -283,8 +261,18 @@ export function proposeProperties(
               `${fn.getModule()}.prospective.${p.functionName}.ts`
             ),
           }),
-        };
-      })
+        });
+        console.debug(`created jsrunner for ${p.functionName}`); // !!!!!!!!!!!
+      } catch (e: unknown) {
+        console.debug(
+          `Exception building a runner for generated validator: ${p.functionName}. Src: ${p.functionSourceCode}. Exception: ${isError(e) ? `${e.name}: ${e.message}` : `<unknown>`}`
+        );
+      }
+    });
+    const differ = new CompositeJudgmentDiff(
+      results.runId,
+      [...concreteExamples, ...mutatedExamples],
+      propRunners
     );
     const message: FuzzPanelMessageToWebView = {
       command: "props.proposed",

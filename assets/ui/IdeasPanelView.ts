@@ -248,7 +248,7 @@ export class IdeasPanelView {
                 td.innerHTML = /*html*/ `
                   <span class="flexBoxes">
                     <div title="add property validator">
-                      <span class="codicon codicon-add"></span>
+                      <!--<span class="codicon codicon-add"></span>-->
                       <span class="codicon codicon-robot"></span>
                     </div>
                     <div>
