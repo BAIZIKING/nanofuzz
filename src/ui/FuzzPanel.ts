@@ -16,7 +16,9 @@ import {
 import { normalizePathForKey } from "../fuzzer/Util";
 import { CodeCoverageMeasureStats } from "../fuzzer/measures/CoverageMeasure";
 import { getPropertyTestSkeleton } from "../fuzzer/analysis/typescript/Util";
-import { proposeProperties } from "./IdeasPanelController";
+import { IdeasPanelController } from "./IdeasPanelController";
+import seedrandom from "seedrandom";
+import { IdeaData } from "../fuzzer/ideas/Types";
 
 /**
  * FuzzPanel displays fuzzer options, actions, and the last results for a
@@ -72,6 +74,7 @@ export class FuzzPanel {
   private _retestingReason: ReturnType<typeof this.resultsAreStale> | "user" =
     false; // retesting reason
   private _pauseTesting = false; // indicates that testing should stop
+  private _ideasPanel: IdeasPanelController | undefined; // controller for ideas panel
 
   // ------------------------ Static Methods ------------------------ //
 
@@ -420,6 +423,24 @@ export class FuzzPanel {
               "workbench.action.openSettings",
               "nanofuzz.ai"
             );
+            break;
+          }
+          case "idea.accept": {
+            if (this._ideasPanel) {
+              const idea: Required<typeof message>["idea"] = JSON5.parse(
+                message.ideaSerialized
+              );
+              this._ideasPanel.accept(idea);
+            }
+            break;
+          }
+          case "idea.reject": {
+            if (this._ideasPanel) {
+              const idea: Required<typeof message>["idea"] = JSON5.parse(
+                message.ideaSerialized
+              );
+              this._ideasPanel.reject(idea);
+            }
             break;
           }
         }
@@ -887,7 +908,7 @@ export class FuzzPanel {
   /**
    * Add code skeleton for a property validator to the program source code.
    */
-  private async _doAddValidatorCmd(prop?: { src: string; name: string }) {
+  public async _doAddValidatorCmd(prop?: { src: string; name: string }) {
     let src: string;
     let name: string;
 
@@ -995,7 +1016,7 @@ ${src}`;
    * of validators from the program source code and sends it back to the
    * front-end.
    */
-  private _doGetValidators() {
+  public _doGetValidators() {
     let program: ProgramDef;
     try {
       program = ProgramDef.fromModule(this._fuzzEnv.function.getModule());
@@ -1246,14 +1267,19 @@ ${src}`;
               this._updateHtml();
               this._focusInput = undefined;
 
-              // Diff panel !!!!!!!!!!!
               setTimeout(() => {
-                proposeProperties(
-                  this._panel.webview,
-                  this._tester.getModule(),
-                  this._fuzzEnv.function,
-                  result
-                );
+                if (!this._ideasPanel) {
+                  this._ideasPanel = new IdeasPanelController({
+                    webview: this._panel.webview,
+                    module: this._tester.getModule(),
+                    fn: this._fuzzEnv.function,
+                    results: result,
+                    prng: seedrandom(),
+                    panel: this,
+                  });
+                } else {
+                  this._ideasPanel.refresh(); // !!!!!!!!!!
+                }
               }, 0);
             }
           },
@@ -2476,7 +2502,7 @@ ${src}`;
           icon: "codicon-lightbulb",
           payload: "ideasGrid",
           description:
-            "Some of the ideas below, which are based on the last test run, might help you improve the test suite. The ideas are based on the last test run and might not reflect changes you made subsequently.",
+            "The ideas below are based on the prior test run and might help you improve the test suite.",
         });
 
         // If the prior tab no longer exists in the display set, don't use it
@@ -2507,7 +2533,7 @@ ${src}`;
         tabs.forEach((e) => {
           if (e.payload !== "fuzzGrid" || resultSummary[e.id] > 0) {
             html += /*html*/ `
-                <vscode-panel-tab id="tab-${e.id}" ${e.payload === "ideasGrid" ? `class="hidden"` : ``}>
+                <vscode-panel-tab id="tab-${e.id}">
                   ${
                     e.icon
                       ? `<div class="codicon ${e.icon}"></div>`
@@ -2515,10 +2541,10 @@ ${src}`;
                   }`;
             if (e.payload === "fuzzGrid" || e.payload === "ideasGrid") {
               html += /*html*/ `
-                  <vscode-badge ${e.payload === "ideasGrid" ? `id="ideasCountBadge" class="hidden"` : ""} appearance="secondary">${
+                  <vscode-badge ${e.payload === "ideasGrid" ? `id="ideasPanelCountBadge" class="hidden"` : ""} appearance="secondary">${
                     e.payload === "fuzzGrid"
                       ? resultSummary[e.id]
-                      : /*html */ `<span id="ideasCount">0</span>`
+                      : /*html */ `<span id="ideasPanelCount">0</span>`
                   }</vscode-badge>`;
             }
             html += /*html*/ `
@@ -3610,7 +3636,12 @@ export type FuzzPanelMessageFromWebView =
         | "open.source"
         | "open.settings.ai";
     }
-  | { command: "validator.add"; prop?: { src: string; name: string } };
+  | { command: "validator.add"; prop?: { src: string; name: string } }
+  | {
+      command: "idea.accept" | "idea.reject";
+      ideaSerialized: string;
+      idea?: IdeaData;
+    };
 
 /**
  * Represents the possible states of the FuzzPanel
@@ -3688,11 +3719,7 @@ export type FuzzPanelMessageToWebView =
   | { command: "coverage.hidden" }
   | { command: "coverage.stale" }
   | {
-      command: "props.proposed";
-      props: {
-        [k: string]: {
-          src: string[];
-          diffSerialized: string; /* JudgmentDiff */
-        };
-      }; // TODO Diffs of multiple props
+      command: "ideas.updated";
+      ideasSerialized: string; // IdeaData[]
+      ideas?: IdeaData[];
     };

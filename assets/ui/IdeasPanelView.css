@@ -64,12 +64,12 @@
   top: 4em;
   z-index: 1;
 }
-.ideasGrid > tbody > tr#idea-empty > td {
+.ideasGrid > tbody > tr#ideasPanel-empty > td {
   padding-top: 0.5em;
   padding-bottom: 0.5em;
   text-align: center;
 }
-.ideasGrid > tbody > tr#idea-empty > td > span {
+.ideasGrid > tbody > tr#ideasPanel-empty > td > span {
   opacity: 60%;
 }
 .ideasGrid pre.code {

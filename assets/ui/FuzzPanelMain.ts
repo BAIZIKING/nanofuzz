@@ -32,7 +32,6 @@ import {
   FuzzPanelMessageFromWebView,
   FuzzPanelPinMessage,
 } from "../../src/ui/FuzzPanel";
-import { JudgmentDiff } from "../../src/fuzzer/oracles/JudgmentDiff";
 import { IdeasPanelView } from "./IdeasPanelView";
 
 const vscode = acquireVsCodeApi();
@@ -126,7 +125,7 @@ let lastResultsTableShown: Element | undefined = undefined;
 let coverageHeatmapIsStale = false;
 
 // Ideas Panel
-let ideasGrid: IdeasPanelView;
+let ideasGrid: IdeasPanelView | undefined;
 
 /**
  * Sets up the UI when the page is loaded, including setting up
@@ -293,7 +292,6 @@ function main() {
     );
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
-        console.debug(`tab clicked (event handler): ${tab.id}`); // !!!!!!!!!!
         const htmlElement = document.querySelector("html");
         if (!htmlElement) {
           throw new Error("Cannot find html element");
@@ -463,10 +461,20 @@ function main() {
           show(getElementByIdOrThrow("fuzzWarnings.coverage.stale"));
         }
         break;
-      case "props.proposed":
-        handleProposeProps(data.props);
-        hljs.highlightAll();
+      case "ideas.updated": {
+        const ideas: Required<typeof data>["ideas"] = JSON5.parse(
+          data.ideasSerialized
+        );
+        if (ideasGrid) {
+          ideasGrid.update(ideas);
+        } else {
+          console.error(
+            `No IdeasGrid present for ${data.command}; discarding ${ideas.length} ideas.`
+          );
+        }
+        hljs.highlightAll(); // !!!!!!!!!!
         break;
+      }
     }
   });
 
@@ -834,6 +842,20 @@ function main() {
       }
     }
   } // if we have results data
+
+  // Create the IdeasGrid
+  try {
+    ideasGrid = new IdeasPanelView(
+      vscode,
+      JSON5.parse<string[]>(
+        getElementByIdOrThrow("fuzzFnInputNames").innerText
+      ),
+      getElementByIdOrThrow("tab-ideas"),
+      getElementByIdOrThrow("fuzzResultsGrid-ideas")
+    );
+  } catch (_e: unknown) {
+    // this is exepected to fail in some modes
+  }
 } // fn: main()
 
 /**
@@ -2377,52 +2399,6 @@ function handleOpenSource() {
   };
   vscode.postMessage(message);
 } // fn: handleOpenSource()
-
-// !!!!!!
-function handleProposeProps(props: {
-  [k: string]: {
-    src: string[];
-    diffSerialized: string; /* JudgmentDiff */
-  };
-}) {
-  // Create the ideas grid if it doesn't exist yet
-  if (ideasGrid === undefined) {
-    if (document.getElementById("tab-ideas")) {
-      // Ideas Panel View
-      ideasGrid = new IdeasPanelView(
-        vscode,
-        JSON5.parse<string[]>(
-          getElementByIdOrThrow("fuzzFnInputNames").innerText
-        ),
-        getElementByIdOrThrow("tab-ideas"),
-        getElementByIdOrThrow("fuzzResultsGrid-ideas")
-      );
-    } else {
-      console.debug(
-        `Discarded proposed properties message because no ideas grid is present on the page`
-      );
-      return;
-    }
-  }
-
-  // missing check: avoid clobbering the user's work if already open !!!!!!!!!!!!
-  ideasGrid.deleteAllOfType("property.suggestion");
-  ideasGrid.add(
-    Object.keys(props).map((k) => {
-      const diff = JSON5.parse<JudgmentDiff>(props[k].diffSerialized);
-      return {
-        type: "property.suggestion" as const,
-        id: k,
-        priority: diff.priority,
-        prop: {
-          name: k,
-          src: props[k].src,
-        },
-        diff: diff,
-      };
-    })
-  );
-} // fn: handleProposeProps
 
 /**
  * Send message to back-end to refresh the validators

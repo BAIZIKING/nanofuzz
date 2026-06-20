@@ -245,7 +245,7 @@ export class CompositeJudgmentDiff {
     const total =
       negativeAspects + neutralAspects + positiveAspects + exceptions;
 
-    if (!neutralAspects) return 0;
+    //if (!neutralAspects) return 0;
 
     if (negativeAspects) {
       return (negativeAspects + exceptions) * -1 + positiveAspects / total;
@@ -299,3 +299,9 @@ export type JudgmentDiffSummary = {
   squares: ColorSquare[]; // five elements
 };
 export type ColorSquare = "red" | "green" | "gray";
+
+export const ColorSquareNames = {
+  green: `prospective failures detected`,
+  red: `test suite contradictions`,
+  gray: `confirmations of test suite judgments`,
+} as const;

@@ -1,24 +1,20 @@
 import * as JSON5 from "json5";
-import { JudgmentDiff } from "../../src/fuzzer/oracles/JudgmentDiff";
-import {
-  getElementByIdOrThrow,
-  hide,
-  htmlEscape,
-  isHidden,
-  judgmentToIcon,
-  show,
-  simpleToast,
-  toggleHidden,
-} from "./Util";
+import { getElementByIdOrThrow, hide, show } from "./Util";
 import { FuzzPanelMessageFromWebView } from "../../src/ui/FuzzPanel";
 import { WebviewApi } from "vscode-webview";
-import { isError } from "../../src/Util";
-import { traceJudgment } from "../../src/ui/JudgmentTrace";
+import { AbstractIdeaView } from "../../src/fuzzer/ideas/AbstractIdeaView";
+import { IdeaData } from "../../src/fuzzer/ideas/Types";
+import { IdeaViewFactory } from "../../src/fuzzer/ideas/IdeaViewFactory";
+import { AbstractIdeaData } from "../../src/fuzzer/ideas/AbstractIdeaModel";
 
-// Ideas Grid
+// Ideas Panel View
 export class IdeasPanelView {
-  protected _ideas = new Map<Idea["type"], Map<string, Idea>>();
-  protected _drawnYet = false;
+  protected static _instance: IdeasPanelView | undefined;
+
+  protected _ideas = new Map<
+    string,
+    { view: AbstractIdeaView; data: IdeaData }
+  >();
   protected _htmlTab: HTMLElement;
   protected _htmlGrid: HTMLElement;
   protected _inputNames: string[];
@@ -31,96 +27,130 @@ export class IdeasPanelView {
     htmlGrid: HTMLElement
   ) {
     this._vscode = vscode;
-    this._htmlGrid = htmlGrid;
-    this._htmlTab = htmlTab;
     this._inputNames = inputNames;
+    this._htmlTab = htmlTab;
+    this._htmlGrid = htmlGrid;
+
     this._draw();
   }
 
-  public add(ideas: Idea[]): void {
-    for (const idea of ideas) {
-      (
-        this._ideas.get(idea.type) ??
-        this._ideas.set(idea.type, new Map<string, Idea>()).get(idea.type)!
-      ).set(idea.id, idea);
+  // Internal Rep Management
+
+  protected _getIdea(
+    type: AbstractIdeaData["type"],
+    id: AbstractIdeaData["id"]
+  ): { view: AbstractIdeaView; data: IdeaData } | undefined {
+    return this._ideas.get(`${type}.${id}`);
+  }
+  protected _getIdeas(): { view: AbstractIdeaView; data: IdeaData }[] {
+    return Array.from(this._ideas)
+      .map((i) => i[1])
+      .sort((a, b) => b.data.priority - a.data.priority);
+  }
+  protected _setIdea(data: IdeaData, view: AbstractIdeaView): void {
+    this._ideas.set(`${data.type}.${data.id}`, { data, view });
+  }
+  protected _deleteIdea(type: IdeaData["type"], id: IdeaData["id"]): boolean {
+    return this._ideas.delete(`${type}.${id}`);
+  }
+
+  // Messages from back-end controller
+
+  public update(ideas: IdeaData[]): void {
+    if (ideas.length) {
+      ideas.forEach((data) => {
+        const view = IdeaViewFactory(data, this._inputNames, this);
+        this._setIdea(data, view);
+        if (this._isVisible(data)) {
+          view.draw(this._htmlGrid);
+        } else {
+          view.undraw(this._htmlGrid);
+        }
+      });
+      // sort and filter the view
+      this._htmlGrid.querySelector("tbody")?.replaceChildren(
+        ...this._getIdeas()
+          .filter((i) => this._isVisible(i.data))
+          .map((i) => [
+            getElementByIdOrThrow(`${i.view.htmlId}-summary`),
+            getElementByIdOrThrow(`${i.view.htmlId}-detail`),
+          ])
+          .flat()
+      );
+      this._updateBadge();
+      this._updateEmptyRow();
     }
-    this._draw();
   }
 
-  public delete(type: Idea["type"], id: Idea["id"]): boolean {
-    const deleted = this._ideas.get(type)?.delete(id) ?? false;
-    if (deleted) {
-      [
-        this._htmlGrid.querySelector(
-          `#idea-${type}-${id}-summary`.replaceAll(".", "-")
-        ),
-        this._htmlGrid.querySelector(
-          `#idea-${type}-${id}-detail`.replaceAll(".", "-")
-        ),
-      ].forEach((e) => (e ? e.remove() : e)); // update DOM
-      const ideas = this._getIdeas();
-      this._updateBadge(ideas.length);
-      const emptyRow = this._htmlGrid.querySelector(`#idea-empty`);
-      if (emptyRow) {
-        (ideas.length ? hide : show)(emptyRow);
-      }
-    }
-    return deleted;
+  // Messages from front-end views
+
+  public acceptClicked(
+    type: AbstractIdeaData["type"],
+    id: AbstractIdeaData["id"]
+  ): void {
+    const idea = this._getIdea(type, id);
+    if (!idea) return;
+    const message: FuzzPanelMessageFromWebView = {
+      command: "idea.accept",
+      ideaSerialized: JSON5.stringify(idea.data),
+      idea: idea.data,
+    };
+    this._vscode.postMessage(message);
   }
 
-  public accept(type: Idea["type"], id: Idea["id"]): boolean {
-    const idea = this._ideas.get(type)?.get(id);
-    if (!idea) return false;
-    switch (idea.type) {
-      case "property.suggestion": {
-        const message: FuzzPanelMessageFromWebView = {
-          command: "validator.add",
-          prop: { ...idea.prop, src: idea.prop.src.join("\n") },
-        };
-        this._vscode.postMessage(message);
-      }
-    }
-    this.delete(type, id);
-    return true;
+  public rejectClicked(
+    type: AbstractIdeaData["type"],
+    id: AbstractIdeaData["id"]
+  ): void {
+    const idea = this._getIdea(type, id);
+    if (!idea) return;
+    const message: FuzzPanelMessageFromWebView = {
+      command: "idea.reject",
+      ideaSerialized: JSON5.stringify(idea.data),
+      idea: idea.data,
+    };
+    this._vscode.postMessage(message);
   }
 
-  public reject(type: Idea["type"], id: Idea["id"]): boolean {
-    return this.delete(type, id);
+  // Internal functions
+
+  protected _isVisible(i: IdeaData): boolean {
+    return i.status === "proposed" && i.priority > 0;
   }
 
-  public deleteAllOfType(ideaType: Idea["type"]): boolean {
-    const deleted = this._ideas.delete(ideaType);
-    if (deleted) {
-      this._draw();
-    }
-    return deleted;
+  protected _visibleCount(): number {
+    return this._getIdeas().filter((i) => this._isVisible(i.data)).length;
   }
 
-  protected _getIdeas(): Idea[] {
-    const ideas: Idea[] = [];
-    // flatten & filter
-    this._ideas.forEach((t) => {
-      console.debug(`${t.size} subideas`); // !!!!!!!!!!!
-      ideas.push(...Array.from(t.values()));
-    });
-    console.debug(`${ideas.length} total ideas`); // !!!!!!!!!!!
-    // sort
-    return ideas.sort((a, b) => b.priority - a.priority);
-  }
-
-  protected _updateBadge(count: number): void {
-    const ideasCountElement = this._htmlTab.querySelector("#ideasCount");
-    const ideasCountBadgeElement =
-      this._htmlTab.querySelector("#ideasCountBadge");
+  protected _updateBadge(): void {
+    const count = this._visibleCount();
+    const ideasCountElement = this._htmlTab.querySelector("#ideasPanelCount");
+    const ideasCountBadgeElement = this._htmlTab.querySelector(
+      "#ideasPanelCountBadge"
+    );
     if (ideasCountElement && ideasCountBadgeElement) {
       ideasCountElement.innerHTML = count.toString();
       (count ? show : hide)(ideasCountBadgeElement);
+    } else {
+      throw new Error(`Could not find badge elements`);
     }
   }
 
-  protected _draw(): void {
-    // tab on and off !!!!!!!!!!
+  protected _updateEmptyRow(): void {
+    const tbody = this._htmlGrid.querySelector("tbody");
+    if (!tbody) throw new Error("Cannot find idea grid tbody");
 
+    let emptyRow = this._htmlGrid.querySelector(`#ideasPanel-empty`);
+    if (!emptyRow) {
+      emptyRow = document.createElement("tr");
+      emptyRow.id = `ideasPanel-empty`;
+      emptyRow.innerHTML = `<td colspan="7"><span>No new ideas to share right now</span></td>`;
+      tbody.appendChild(emptyRow);
+    }
+    (this._visibleCount() ? hide : show)(emptyRow);
+  }
+
+  protected _draw(): void {
     const cols = [
       { id: "expand", text: "" },
       { id: "desc", text: "idea", hspan: { cols: 1, text: "idea" } },
@@ -137,395 +167,36 @@ export class IdeasPanelView {
         icon: "codicon-add",
         hspan: { cols: 2, text: "actions" },
       },
-      { id: "reject", text: "reject suggestion", icon: "codicon-trash" },
+      { id: "reject", text: "reject idea", icon: "codicon-trash" },
     ] as const;
 
-    // Redraw the grid
+    // Redraw the empty grid
     let spanning = 0;
-    if (!this._drawnYet) {
-      /* header row */
-      const thead = this._htmlGrid.querySelector("thead");
-      if (!thead) throw new Error("Cannot find idea grid thead");
+    const thead = this._htmlGrid.querySelector("thead");
+    if (!thead) throw new Error("Cannot find idea grid thead");
 
-      const hRow = thead.appendChild(document.createElement("tr"));
-      cols.forEach((h) => {
-        if (spanning > 0) {
-          spanning--;
+    const hRow = thead.appendChild(document.createElement("tr"));
+    cols.forEach((h) => {
+      if (spanning > 0) {
+        spanning--;
+      } else {
+        const th = hRow.appendChild(document.createElement("th"));
+        if ("hspan" in h && h.hspan.cols > 0) {
+          spanning = h.hspan.cols - 1;
+          th.colSpan = h.hspan.cols;
+          th.innerText = h.hspan.text;
+          th.classList.add("spanning");
         } else {
-          const th = hRow.appendChild(document.createElement("th"));
-          if ("hspan" in h && h.hspan.cols > 0) {
-            spanning = h.hspan.cols - 1;
-            th.colSpan = h.hspan.cols;
-            th.innerText = h.hspan.text;
-            th.classList.add("spanning");
+          if ("icon" in h) {
+            th.innerHTML = `<span><span class="codicon ${h.icon}" title="${h.text}"></span></span>`;
+            th.classList.add("colorColumn");
           } else {
-            if ("icon" in h) {
-              th.innerHTML = `<span><span class="codicon ${h.icon}" title="${h.text}"></span></span>`;
-              th.classList.add("colorColumn");
-            } else {
-              th.innerText = h.text;
-            }
+            th.innerText = h.text;
           }
-        }
-      });
-    }
-
-    const tbody = this._htmlGrid.querySelector("tbody");
-    if (!tbody) throw new Error("Cannot find idea grid tbody");
-
-    const ideas = this._getIdeas();
-    this._updateBadge(ideas.length);
-
-    // empty row (shown when there are no results to show)
-    const emptyRow = document.createElement("tr");
-    emptyRow.id = `idea-empty`;
-    emptyRow.innerHTML = `<td colspan="${cols.length}"><span>No new ideas to share right now</td>`;
-    (ideas.length ? hide : show)(emptyRow);
-
-    tbody.replaceChildren(emptyRow);
-
-    const squareTitles = {
-      green: `prospective failures detected`,
-      red: `test suite contradictions`,
-      gray: `confirmations of test suite judgments`,
-    };
-
-    /* body */
-    ideas.forEach((i, ideaId) => {
-      const toggleHandlers: { attachTo: string; target: string }[] = [];
-      /* summary row */
-      const detailTr = document.createElement("tr");
-      detailTr.id = `idea-${i.type}-${i.id}-detail`.replaceAll(".", "-");
-      const tr = document.createElement("tr");
-      tr.id = `idea-${i.type}-${i.id}-summary`.replaceAll(".", "-");
-      tr.classList.add("sticky", "lineBelow");
-      cols.forEach((c) => {
-        const td = document.createElement("td");
-        if ("icon" in c) {
-          td.classList.add("colorColumn");
-        }
-        switch (c.id) {
-          case "expand": {
-            const spanExpand = document.createElement("span");
-            td.appendChild(spanExpand);
-            spanExpand.classList.add(
-              "clickable",
-              "codicon",
-              "codicon-chevron-right"
-            );
-            spanExpand.setAttribute("title", "expand");
-
-            const spanCollapse = document.createElement("span");
-            td.appendChild(spanCollapse);
-            spanCollapse.classList.add(
-              "clickable",
-              "codicon",
-              "codicon-chevron-down",
-              "hidden"
-            );
-            spanCollapse.setAttribute("title", "collapse");
-
-            [spanExpand, spanCollapse].forEach((span) => {
-              span.addEventListener("click", () => {
-                if (isHidden(spanCollapse)) {
-                  /* expand */
-                  show(spanCollapse);
-                  hide(spanExpand);
-                  show(detailTr);
-                } else {
-                  /* collapse */
-                  hide(spanCollapse);
-                  show(spanExpand);
-                  hide(detailTr);
-                }
-              });
-            });
-            break;
-          }
-          case "desc":
-            switch (i.type) {
-              case "property.suggestion": {
-                td.innerHTML = /*html*/ `
-                  <span class="flexBoxes">
-                    <div title="add property validator">
-                      <!--<span class="codicon codicon-add"></span>-->
-                      <span class="codicon codicon-robot"></span>
-                    </div>
-                    <div>
-                      <span class="editorFont">${htmlEscape(i.prop.name)}</span>
-                    </div>
-                    ${
-                      i.diff.detail.exceptions.length
-                        ? /*html*/ `<div>
-                            <span title="Threw ${i.diff.detail.exceptions.length} exceptions for this set of tests" class="codicon codicon-warning"></span>
-                          </div>`
-                        : ""
-                    }
-                  </span>`;
-                break;
-              }
-            }
-            break;
-          case "impactGreens":
-            td.innerHTML = /*html*/ `
-              <span class="diffSummary"><span aria-label="Judgments changed: ${i.diff.summary.greens} ${squareTitles.green}" title="${squareTitles.green}" class="greens">+${i.diff.summary.greens}</span></span>`;
-            break;
-          case "impactReds":
-            td.innerHTML = /*html*/ `
-              <span class="diffSummary"><span aria-label="Judgments changed: ${i.diff.summary.reds} ${squareTitles.red}" title="${squareTitles.red}" class="reds">-${i.diff.summary.reds}</span>`;
-            break;
-          case "impactSquares":
-            td.innerHTML = /*html*/ `
-              <span class="diffSummary">
-                <div class="colorSquares">
-                  ${[0, 1, 2, 3, 4].map((s) => `<div title="${squareTitles[i.diff.summary.squares[s]]}" class="${i.diff.summary.squares[s]}"></div>`).join("")}
-                </div>
-              </span>`;
-            break;
-          case "accept": {
-            const outerSpan = document.createElement("span");
-            outerSpan.setAttribute("title", c.text);
-            const innerSpan = document.createElement("span");
-            innerSpan.classList.add("clickable", "codicon", c.icon);
-            outerSpan.appendChild(innerSpan);
-            td.appendChild(outerSpan);
-            innerSpan.addEventListener("click", () => {
-              console.debug(`Accepting ${i.type} ${i.id}`); // !!!!!!!!!!
-              this.accept(i.type, i.id);
-              simpleToast("Idea accepted");
-            });
-            break;
-          }
-          case "reject": {
-            const outerSpan = document.createElement("span");
-            outerSpan.setAttribute("title", c.text);
-            const innerSpan = document.createElement("span");
-            innerSpan.classList.add("clickable", "codicon", c.icon);
-            outerSpan.appendChild(innerSpan);
-            td.appendChild(outerSpan);
-            innerSpan.addEventListener("click", () => {
-              console.debug(`Rejecting ${i.type} ${i.id}`); // !!!!!!!!!!
-              this.reject(i.type, i.id);
-              simpleToast("Idea rejected");
-            });
-            break;
-          }
-        }
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-
-      /* Detail row */
-      detailTr.classList.add("hidden", "ideaDetail", "lineBelow");
-      detailTr.appendChild(document.createElement("td")); // spacer cell
-
-      /* 
-        Columns:
-        (1) PUT input, 
-        (2) the PUT output, 
-        (3) judgment of the baseline test suite, 
-        (4) judgment of the baseline test suite with the candidate assertion added, and 
-        (5) an (i) button that provides an explanation of the change in judgment. 
-        
-        Above the grid is a set of filter controls, which hide or show prospective failures 
-        (green), false passes and failures (red), and neutrals such as true passes and 
-        failures (gray). The coloring and decoration of the fourth column corresponds to 
-        that of the filter controls and that of the summary form.
-      */
-      const td = document.createElement("td");
-      td.colSpan = cols.length - 1;
-
-      switch (i.type) {
-        case "property.suggestion": {
-          const getExceptionMsg = (e: unknown) =>
-            isError(e) ? `${e.name}: ${e.message}` : JSON5.stringify(e);
-          const exceptions = i.diff.detail.exceptions.map((e) => ({
-            ...e,
-            color: "red",
-          }));
-          const jj = [
-            ...i.diff.detail.prospectiveFailures.map((e) => ({
-              ...e,
-              color: "green",
-            })),
-            ...i.diff.detail.falseFailures.map((e) => ({
-              ...e,
-              color: "red",
-            })),
-            ...i.diff.detail.falsePasses.map((e) => ({
-              ...e,
-              color: "red",
-            })),
-          ];
-          td.innerHTML = /*html*/ `
-            <div>Adding this property validator...
-              <small>
-                <pre class="code"><code class="typescript.html">${i.prop.src.join("\n")}</code></pre>
-              </small>
-            </div>
-            ${
-              exceptions.length === 0
-                ? ""
-                : /*html*/ `
-              <div>...would throw ${exceptions.length} new exceptions (<a id="${`idea-${i.type}-${i.id}-detail-exceptionToggle`.replaceAll(".", "-")}" class="clickable">show</a>)...</div>
-              <div id="${`idea-${i.type}-${i.id}-detail-exceptions`.replaceAll(".", "-")}" class="hidden">
-                <table class="fuzzGrid">
-                  <thead> 
-                    <tr>
-                      <th>&nbsp;</th>
-                      ${this._inputNames.map((i) => /*html*/ `<th>input: ${htmlEscape(i)}</th>`).join("\n")}
-                      <th>validator would throw exception</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${exceptions
-                      .map(
-                        (e) => /*html*/ `
-                    <tr>
-                      <td><span class="codicon codicon-warn"></span></td>
-                      ${this._inputNames
-                        .map((_name, i) =>
-                          e.example.inWrapped[i].value === undefined
-                            ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
-                            : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(e.example.inWrapped[i].value))}</span></td>`
-                        )
-                        .join("\n")}
-                      <td class="editorFont">${htmlEscape(
-                        getExceptionMsg(e.addlJudgments[i.prop.name].error)
-                      )}
-                      </td>
-                    </tr>`
-                      )
-                      .join("")}
-                  </tbody>              
-                </table>
-                <br />
-              </div>`
-            }
-            <div>...would alter ${jj.length ? `these ${jj.length}` : "no"} test judgments${jj.length ? ":" : "."}
-              <table class="fuzzGrid${jj.length ? "" : " hidden"}">
-                <thead> 
-                  <tr>
-                    <th>
-                      <span class="diffSummary">
-                        <div class="colorSquares">
-                          <div class="gray"></div>
-                        </div>
-                      </span>
-                    </th>
-                    ${this._inputNames.map((i) => /*html*/ `<th>input: ${htmlEscape(i)}</th>`).join("\n")}
-                    <th>output</th>
-                    <th>current judgment</th>
-                    <th>new judgment</td>
-                    <th>&nbsp;</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${jj
-                    .map(
-                      (j, jId) => /*html*/ `
-                  <tr>
-                    <td>
-                      <span class="diffSummary">
-                        <div class="colorSquares">
-                          <div class="${j.color}"></div>
-                        </div>
-                      </span>
-                    </td>
-                    ${this._inputNames
-                      .map((_name, i) =>
-                        j.example.inWrapped[i].value === undefined
-                          ? /*html*/ `<td class="editorFont noInput"><span>(no input)</span></td>`
-                          : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(j.example.inWrapped[i].value))}</span></td>`
-                      )
-                      .join("\n")}
-                    <td class="editorFont"><span>${j.source.type === "mutation" ? `<span class="codicon codicon-bug inline" title="Mutated/buggy program test output">` : `<span class="codicon codicon-beaker inline" title="Actual program test output">`}</span></span><span> ${
-                      j.example.timeout
-                        ? "(timeout)"
-                        : j.example.exception
-                          ? "(exception)"
-                          : htmlEscape(
-                              JSON5.stringify(j.example.outWrapped.value)
-                            )
-                    }</td>
-                    <td class="editorFont removedLine">${judgmentToIcon(j.judgments.composite.judgment)} ${j.judgments.composite.judgment}</td>
-                    <td class="editorFont addedLine">${judgmentToIcon(j.rejudgment.judgment)} ${j.rejudgment.judgment}</td>
-                    <td class="colorColumn"><span><span id="idea-jTraceToggle-${ideaId}-${jId}" title="more info" class="clickable codicon codicon-info"></span></span></td>
-                  </tr>${toggleHandlers.push({ attachTo: `idea-jTraceToggle-${ideaId}-${jId}`, target: `idea-jTraceDetail-${ideaId}-${jId}` }) ? "" : ""}
-                  <tr id="idea-jTraceDetail-${ideaId}-${jId}" class="hidden">
-                      <td colspan="${this._inputNames.length + 2}"></td>
-                      <td class="topAlign">
-                        <div class="editorFont judgmentTrace"><small>${traceJudgment(j.judgments.composite)}</small></div>
-                      </td>
-                      <td colspan="2" class="topAlign">
-                        <div class="editorFont judgmentTrace"><small>${traceJudgment(j.rejudgment)}</small></div>
-                      </td>
-                  </tr>`
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            </div>
-            <div>&nbsp;</div>`;
-          const exceptionToggleBtn = td.querySelector(
-            `#idea-${i.type}-${i.id}-detail-exceptionToggle`.replaceAll(
-              ".",
-              "-"
-            )
-          );
-          const exceptionToggleTable = td.querySelector(
-            `#idea-${i.type}-${i.id}-detail-exceptions`.replaceAll(".", "-")
-          );
-          if (exceptionToggleBtn && exceptionToggleTable) {
-            exceptionToggleBtn.addEventListener("click", () => {
-              toggleHidden(exceptionToggleTable);
-              exceptionToggleBtn.innerHTML = isHidden(exceptionToggleTable)
-                ? "show"
-                : "hide";
-            });
-          }
-          break;
         }
       }
-
-      detailTr.appendChild(td);
-      tbody.appendChild(detailTr);
-
-      // Attach event handlers to judgment diffs
-      console.debug(`toggleHandlers length=${toggleHandlers.length}`); // !!!!!!!!!!
-      toggleHandlers.forEach((toggle) => {
-        getElementByIdOrThrow(toggle.attachTo).addEventListener("click", () => {
-          toggleHidden(getElementByIdOrThrow(toggle.target));
-        });
-      });
     });
-
-    // flattem, sort, and filter the ideas
-
-    this._drawnYet = true;
-    // !!!!!!!!!! this isn't really right b/c we need to handle to
-    // condition where the user has the tab open (e.g., we need to
-    // select another tab)
-    (this._ideas.size > 0 ? show : hide)(this._htmlTab);
-    (this._ideas.size > 0 ? show : hide)(this._htmlGrid);
+    this._updateBadge();
+    this._updateEmptyRow();
   }
 }
-
-type Idea = PropertyIdea; // !!!!!!!!!! other ideas here
-
-type PropertyIdea = {
-  type: "property.suggestion";
-  id: string;
-  priority: number;
-  prop: {
-    name: string;
-    src: string[];
-  };
-  diff: JudgmentDiff;
-  /* !!!!!!!!!!
-  combos: {
-    props: string[];
-    diff: JudgmentDiff;
-  };
-  */
-};
