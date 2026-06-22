@@ -71,7 +71,9 @@ export class ArgDef<T extends ArgType> {
     this.dims = dims ?? 0;
     this.optional = optional ?? false;
     this.children =
-      type === ArgTag.OBJECT || type === ArgTag.UNION ? children ?? [] : [];
+      type === ArgTag.OBJECT || type === ArgTag.UNION || type === ArgTag.TUPLE
+        ? children ?? []
+        : [];
     this.typeRef = typeRef;
 
     // Ensure the options are valid before ingesting them
@@ -198,6 +200,7 @@ export class ArgDef<T extends ArgType> {
       case ArgTag.OBJECT:
       case ArgTag.LITERAL:
       case ArgTag.UNION:
+      case ArgTag.TUPLE:
         return [];
       case ArgTag.UNRESOLVED:
         throw new Error(`Unsupported type: ${type}`);
@@ -493,15 +496,25 @@ export class ArgDef<T extends ArgType> {
         );
         return `{ ${childTypeAnnotations.join("; ")} }`;
       }
+
       case ArgTag.UNION: {
         const childTypeAnnotations = this.children.map((child) =>
           child.getTypeAnnotation(options)
         );
         return childTypeAnnotations.join(" | ");
       }
+
       case ArgTag.LITERAL: {
         return `${JSON5.stringify(this.getConstantValue())}`;
       }
+
+      case ArgTag.TUPLE: {
+        const childTypeAnnotations = this.children.map((child) =>
+          child.getTypeAnnotation(options)
+        );
+        return `[${childTypeAnnotations.join(", ")}]`;
+      }
+
       default:
         return this.type;
     }

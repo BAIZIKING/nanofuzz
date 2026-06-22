@@ -72,6 +72,7 @@ export enum ArgTag {
   OBJECT = "object",
   LITERAL = "literal",
   UNION = "union",
+  TUPLE = "tuple",
   UNRESOLVED = "unresolved", // unresolved type reference
 }
 export type ArgType =

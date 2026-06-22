@@ -1031,7 +1031,8 @@ export class ProgramDef {
           break;
         }
         case ArgTag.UNION:
-        case ArgTag.OBJECT: {
+        case ArgTag.OBJECT:
+        case ArgTag.TUPLE: {
           thisType.type = {
             dims: dims,
             type: type,
@@ -1090,6 +1091,9 @@ export class ProgramDef {
           options
         );
         return [type, dims + 1, typeName, literalValue];
+      }
+      case "TSTupleType": {
+        return [ArgTag.TUPLE, 0];
       }
       case "TSUndefinedKeyword": {
         return [ArgTag.LITERAL, 0, undefined, undefined];
@@ -1193,9 +1197,12 @@ export class ProgramDef {
               `Internal Error: Unable to find type reference '${typeName}' in program`
             );
           }
+
+          case "TSTupleType":
           case "TSUnionType": {
             return this._getChildrenFromNode(innerNode);
           }
+
           case "TSTypeLiteral": {
             return innerNode.members.map((member) => {
               if (member.type === "TSPropertySignature")
@@ -1207,6 +1214,7 @@ export class ProgramDef {
                 );
             });
           }
+
           default:
             throw new Error(
               "Unsupported object type annotation: " +
@@ -1214,6 +1222,18 @@ export class ProgramDef {
             );
         }
       }
+
+      case "TSTupleType": {
+        return node.elementTypes.map((tupleMember) => {
+          const type =
+            // TODO: Preserve names
+            tupleMember.type === "TSNamedTupleMember"
+              ? tupleMember.elementType
+              : tupleMember;
+          return this._getTypeRefFromAstNode(type, node);
+        });
+      }
+
       default:
         throw new Error(
           "Unsupported type annotation: " +

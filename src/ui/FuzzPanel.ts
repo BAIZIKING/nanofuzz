@@ -2800,6 +2800,9 @@ ${src}`;
       case fuzzer.ArgTag.OBJECT:
         sep = ` = {` + htmlEllipsis;
         break;
+      case fuzzer.ArgTag.TUPLE:
+        sep = ` = [` + htmlEllipsis;
+        break;
       default:
         sep = " = " + htmlEllipsis;
     }
@@ -2948,6 +2951,28 @@ ${src}`;
         // A literal typed input has only one possible value
         break;
 
+      // Tuple-specific Options
+      case fuzzer.ArgTag.TUPLE: {
+        // Output the array form prior to the child arguments.
+        // This seems odd, but the screen reads better to the user this way.
+        html += this._argDefArrayToHtmlForm(arg, idBase, disabledFlag);
+        html += `<div>`;
+        arg
+          .getChildren()
+          .forEach(
+            (child) =>
+              (html += this._argDefToHtmlForm(
+                child,
+                counter,
+                "",
+                "",
+                arg.getType()
+              ))
+          );
+        html += `</div>`;
+        break;
+      }
+
       case fuzzer.ArgTag.UNRESOLVED:
         throw new Error(
           `Cannot render an unresolved argument definition as an HTML form.`
@@ -2961,8 +2986,8 @@ ${src}`;
 
     html += `</div>`;
     // For objects: output the end of object character ("}") here
-    if (argType === fuzzer.ArgTag.OBJECT) {
-      html += /*html*/ `<div class="argDef-preClose"></div><div class="argDef-close">}${endSep}</div>`;
+    if (argType === fuzzer.ArgTag.OBJECT || argType === fuzzer.ArgTag.TUPLE) {
+      html += /*html*/ `<div class="argDef-preClose"></div><div class="argDef-close">${argType === fuzzer.ArgTag.OBJECT ? "}" : "]"}${endSep}</div>`;
     }
     html += `</div>`;
 

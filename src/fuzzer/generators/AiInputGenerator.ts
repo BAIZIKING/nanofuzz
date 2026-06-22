@@ -367,6 +367,33 @@ export class AiInputGenerator extends AbstractInputGenerator {
           });
           return zod.strictObject(obj);
         }
+        case ArgTag.TUPLE: {
+          const tupleItems = argChildren.map((child, i) => {
+            const zodChild = this._argDefToSchema(
+              child,
+              `${path}[${i}]`,
+              directives
+            );
+
+            return child.isOptional()
+              ? zod.union([zodChild, zod.enum([NANOFUZZ_MISSING_PROPERTY])])
+              : zodChild;
+          });
+
+          const desc =
+            argChildren.length === 0
+              ? "value must be an empty tuple"
+              : `value must be a tuple of length ${argChildren.length}`;
+
+          directives.push(`${path}: ${desc}`);
+
+          const [first, ...rest] = tupleItems;
+
+          if (first === undefined) {
+            return zod.tuple([]);
+          }
+          return zod.tuple([first, ...rest]);
+        }
         case ArgTag.UNION: {
           const unionMembers = argChildren.map((child, i) =>
             this._argDefToSchema(child, `${path}.union[${i}]`, directives)
