@@ -37,3 +37,38 @@ export function isError(obj: unknown): obj is Error {
 export function getErrorMessageOrJson(e: unknown): string {
   return isError(e) ? e.message : JSON5.stringify(e);
 } // fn: getErrorMessageOrJson
+
+/**
+ * Recursively freeze each non-primitive property (deep freeze) while also
+ * checking for cycles to avoid infinite recursion.
+ *
+ * Adapted from MDN articles:
+ *   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
+ *   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakSet#detecting_circular_references
+ *
+ * @param o T object to deep freeze
+ * @returns the same object, but now frozen
+ */
+export function deepFreeze<T extends object>(o: T, _refs = new WeakSet()): T {
+  // Avoid infinite recursion
+  if (_refs.has(o)) {
+    return o;
+  }
+
+  // Retrieve the property names defined on object
+  const propNames = Reflect.ownKeys(o);
+
+  // Freeze properties before freezing self
+  let name: string | symbol;
+  for (name of propNames) {
+    const value = (o as any)[name];
+
+    if ((value && typeof value === "object") || typeof value === "function") {
+      _refs.add(o);
+      deepFreeze(value);
+      _refs.delete(o);
+    }
+  }
+
+  return Object.freeze(o);
+}

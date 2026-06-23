@@ -124,7 +124,7 @@ export type InputAndSource = {
  */
 export type FuzzValueOrigin =
   | {
-      type: "user" | "put" | "unknown";
+      type: "user" | "put" | "mutator" | "unknown";
     }
   | {
       type: "generator";

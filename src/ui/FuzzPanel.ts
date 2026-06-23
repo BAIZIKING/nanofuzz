@@ -1120,7 +1120,7 @@ ${src}`;
               } else {
                 return {
                   input: i.input.map((e) => {
-                    const e2 = { ...e };
+                    const e2 = structuredClone(e);
                     // ticks are tester-specific
                     if (
                       e2.origin.type === "generator" &&
@@ -1350,6 +1350,7 @@ ${src}`;
     this._errorStack = undefined;
     this._focusInput = undefined;
     this._coverageStats = undefined;
+    this._ideasPanel = undefined;
     this._updateHtml();
 
     // Save the argument overrides

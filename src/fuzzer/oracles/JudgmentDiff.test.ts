@@ -1,5 +1,5 @@
 import { RunnerFactory } from "../runners/RunnerFactory";
-import { CompositeJudgmentDiff, JudgedExample } from "./JudgmentDiff";
+import { JudgmentDiffer, JudgedExample } from "./JudgmentDiff";
 
 describe("fuzzer.oracles.CompositeJudgmentDiff", () => {
   it("CompositeJudgmentDiff - base", () => {
@@ -47,11 +47,9 @@ export function ${validatorName}(r: FuzzTestResult): "pass" | "fail" | "unknown"
         }),
       },
     ];
-    const diff = new CompositeJudgmentDiff(
-      "dummy-uuid",
-      examples,
-      props
-    ).diffFor([validatorName]);
+    const diff = new JudgmentDiffer("dummy-uuid", examples, props).diffFor([
+      validatorName,
+    ]);
     expect(Object.keys(diff).length).toEqual(4); // !!!!!!!!!! more detail here
     expect(diff.summary).toEqual({
       greens: 0,

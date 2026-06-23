@@ -8,7 +8,7 @@ import { AbstractRunner } from "../runners/AbstractRunner";
  * Generates diffs that show how adding particular property
  * assertions to the test suite would change existing judgments.
  */
-export class CompositeJudgmentDiff {
+export class JudgmentDiffer {
   protected _runId: string;
   protected _examples: readonly JudgedExample[];
   protected _props = new Map<
@@ -46,7 +46,6 @@ export class CompositeJudgmentDiff {
     if (this._props.has(name)) {
       throw new Error(`Property was previously added: ${name}`);
     }
-    console.debug(`Running judgments for property: ${name}`); // !!!!!!!!!!
 
     // Evaluate the property across the set of examples
     const propOracle = new PropertyOracle([runner]);
@@ -55,7 +54,6 @@ export class CompositeJudgmentDiff {
     }
 
     this._props.set(name, true);
-    console.debug(`Done w/judgments for property: ${name}`); // !!!!!!!!!!
   } // fn: _addProperty
 
   /**
@@ -111,7 +109,10 @@ export class CompositeJudgmentDiff {
        * Exceptions.
        */
       if (exceptions) {
-        counters.exceptions.push(rejudgment);
+        // Only report exceptions for actual tests (not mutants)
+        if (rejudgment.source.type === "test") {
+          counters.exceptions.push(rejudgment);
+        }
       } else if (
         /**
          * False Pass. A test execution where the existing test suite fails the test execution,
@@ -169,9 +170,9 @@ export class CompositeJudgmentDiff {
 
     return {
       runId: this._runId,
-      priority: CompositeJudgmentDiff.prioritize(counters),
+      priority: JudgmentDiffer.prioritize(counters),
       detail: counters,
-      summary: CompositeJudgmentDiff.summarize(counters),
+      summary: JudgmentDiffer.summarize(counters),
     };
   } // fn: statsFor
 

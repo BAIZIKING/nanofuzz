@@ -8,14 +8,13 @@ export abstract class AbstractIdeaModel {
   protected readonly _id: string;
   protected readonly _name: string;
   protected _basis: IdeaBasis;
-  protected _priority: number;
+  protected _priority: number = 0;
   protected _status: IdeaStatus = "proposed";
 
-  constructor(idea: AbstractIdeaData, basis: IdeaBasis) {
+  constructor(idea: { id: string; name: string }, basis: IdeaBasis) {
     this._id = idea.id;
     this._name = idea.name;
     this._basis = basis;
-    this._priority = idea.priority;
   }
 
   public abstract get type(): string;

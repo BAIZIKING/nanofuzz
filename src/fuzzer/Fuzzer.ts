@@ -21,7 +21,7 @@ import { MeasureFactory } from "./measures/MeasureFactory";
 import { RunnerFactory } from "./runners/RunnerFactory";
 import { Leaderboard } from "./generators/Leaderboard";
 import { InputGeneratorStatsAi, ScoredInput } from "./generators/Types";
-import { isError, getErrorMessageOrJson } from "../Util";
+import { isError, getErrorMessageOrJson, deepFreeze } from "../Util";
 import { CodeCoverageMeasureStats } from "./measures/CoverageMeasure";
 import { CompositeOracle } from "./oracles/CompositeOracle";
 import { ImplicitOracle } from "./oracles/ImplicitOracle";
@@ -750,6 +750,7 @@ export class Tester {
       // Call the function via the runner
       const startRunTime = performance.now(); // start timer
       try {
+        deepFreeze(result.input);
         const inputValues = result.input.map((e) => e.value);
         const [exeOutput] = runner.run(
           JSON5.parse<typeof inputValues>(JSON5.stringify(inputValues)),
@@ -761,6 +762,7 @@ export class Tester {
           value: exeOutput as ArgValueType,
           origin: { type: "put" },
         });
+        deepFreeze(result.output);
         result.timers.run = performance.now() - startRunTime; // stop timer
       } catch (e: unknown) {
         result.timers.run = performance.now() - startRunTime; // stop timer
@@ -805,7 +807,7 @@ export class Tester {
       // If a property validator is selected, call it to evaluate the result
       if (this._options.useProperty) {
         result.oracles.propertyDetail = propertyOracle.judge(
-          Object.freeze({
+          deepFreeze({
             in: result.input.map((i) => i.value), // inputs
             out:
               result.output.length === 0

@@ -23,9 +23,7 @@ export class ArgDefMutator {
     values: ArgValueTypeWrapped[],
     prng: seedrandom.prng
   ): ArgValueTypeWrapped[] {
-    const valuesClone = JSON5.parse<ArgValueTypeWrapped[]>(
-      JSON5.stringify(values)
-    );
+    const valuesClone = structuredClone(values);
 
     // Calculate possible mutations for the values
     const mutators = ArgDefMutator.getMutators(specs, valuesClone, prng);

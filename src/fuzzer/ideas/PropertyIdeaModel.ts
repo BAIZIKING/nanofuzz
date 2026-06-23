@@ -4,7 +4,7 @@ import * as zod from "zod";
 import { LlmAdapter } from "../adapters/LlmAdapter";
 import { FuzzIoElement, ResultWrapped, unwrapResult } from "../Fuzzer";
 import {
-  CompositeJudgmentDiff,
+  JudgmentDiffer,
   JudgedExample,
   JudgmentDiff,
 } from "../oracles/JudgmentDiff";
@@ -23,7 +23,7 @@ import {
   AbstractIdeaModel,
   IdeaBasis,
 } from "./AbstractIdeaModel";
-import { isError } from "../../Util";
+import { deepFreeze, isError } from "../../Util";
 import { PropertyIdeaView } from "./PropertyIdeaView";
 
 export class PropertyIdeaModel extends AbstractIdeaModel {
@@ -32,11 +32,15 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
   protected _view: PropertyIdeaView | undefined;
   protected _src: string[];
 
-  protected constructor(idea: PropertyIdeaData, basis: IdeaBasis) {
+  protected constructor(
+    idea: { id: string; name: string; src: string[] },
+    basis: IdeaBasis
+  ) {
     super(idea, basis);
-    this._priority = idea.priority;
     this._src = idea.src;
-    this._diff = idea.diff;
+
+    this._diff = this._calcDiff();
+    this._priority = this._diff.priority;
   }
 
   public get diff(): JudgmentDiff {
@@ -52,6 +56,8 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
   }
 
   public refresh(): boolean {
+    this._diff = this._calcDiff();
+    this._priority = this._diff.priority;
     // !!!!!!!!!! implement
     return false;
   }
@@ -77,65 +83,56 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
       diff: this._diff,
     };
   }
-  // !!!!!!
-  // !!!!!!!!!! move all the scoring into the object so we can re-run it
-  public static propose(
-    basis: IdeaBasis,
-    callbackFn: (i: AbstractIdeaModel) => void
-  ): void {
-    if (
-      !LlmAdapter.isConfigured() ||
-      !vscode.workspace
-        .getConfiguration("nanofuzz.ai.properties")
-        .get<boolean>("generate", false) ||
-      !basis.results.env.options.useProperty
-    ) {
-      return;
-    }
 
-    const outputSpec = basis.fn.getReturnArg();
+  protected _calcDiff(): JudgmentDiff {
+    const outputSpec = this._basis.fn.getReturnArg();
     const outputGenerator = outputSpec
-      ? new ArgDefGenerator([outputSpec], basis.prng)
+      ? new ArgDefGenerator([outputSpec], this._basis.prng)
       : undefined;
     const propertyOracle: PropertyOracle = propertyOracleFromNodeModule(
-      module,
-      basis.results.env.validators.map((f) => f.name)
+      this._basis.module,
+      this._basis.results.env.validators.map((f) => f.name)
     );
 
     // Concrete examples actually tested
-    const concreteExamples: JudgedExample[] = basis.results.results.map((r) => {
-      return {
-        example: {
-          exception: r.exception,
-          timeout: r.timeout,
-          outWrapped: { tag: "ArgValueTypeWrapped", value: r.output[0].value },
-          inWrapped: r.input.map((i) => ({
-            tag: "ArgValueTypeWrapped",
-            value: i.value,
-          })),
-        },
-        source: {
-          type: "test",
-          runId: basis.results.runId,
-          testId: r.testId,
-        },
-        judgments: {
-          implicit: r.oracles.implicit,
-          example: r.oracles.example,
-          composite: CompositeOracle.judge([
-            [r.oracles.example, r.oracles.property],
-            [r.oracles.implicit],
-          ]),
-          property: r.oracles.property,
-          propertyDetail: r.oracles.propertyDetail,
-        },
-        addlJudgments: {},
-      };
-    });
+    const concreteExamples: JudgedExample[] = this._basis.results.results.map(
+      (r) => {
+        return {
+          example: deepFreeze({
+            exception: r.exception,
+            timeout: r.timeout,
+            outWrapped: {
+              tag: "ArgValueTypeWrapped",
+              value: r.output[0].value,
+            },
+            inWrapped: r.input.map((i) => ({
+              tag: "ArgValueTypeWrapped",
+              value: i.value,
+            })),
+          }),
+          source: deepFreeze({
+            type: "test",
+            runId: this._basis.results.runId,
+            testId: r.testId,
+          }),
+          judgments: deepFreeze({
+            implicit: r.oracles.implicit,
+            example: r.oracles.example,
+            composite: CompositeOracle.judge([
+              [r.oracles.example, r.oracles.property],
+              [r.oracles.implicit],
+            ]),
+            property: r.oracles.property,
+            propertyDetail: r.oracles.propertyDetail,
+          }),
+          addlJudgments: {},
+        };
+      }
+    );
 
     // Mutate outputs of examples with a ground truth example assertion
     const mutatedExamples: JudgedExample[] = outputSpec
-      ? basis.results.results
+      ? this._basis.results.results
           .filter(
             (r) => r.expectedOutput && r.oracles.example.judgment !== "unknown"
           )
@@ -144,60 +141,68 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
 
             // Synthesize an exception example
             if (!r.exception) {
-              mutants.push({
-                exception: true,
-                timeout: false,
-                inWrapped: r.input.map((i) => ({
-                  tag: "ArgValueTypeWrapped",
-                  value: i.value,
-                })),
-                outWrapped: {
-                  tag: "ArgValueTypeWrapped",
-                  value: undefined,
-                },
-              });
-            }
-
-            // Synthesize a timeout example
-            if (!r.timeout) {
-              mutants.push({
-                exception: false,
-                timeout: true,
-                inWrapped: r.input.map((i) => ({
-                  tag: "ArgValueTypeWrapped",
-                  value: i.value,
-                })),
-                outWrapped: {
-                  tag: "ArgValueTypeWrapped",
-                  value: undefined,
-                },
-              });
-            }
-
-            // Synthesize a mutant example if we have an output spec
-            if (outputGenerator) {
-              try {
-                mutants.push({
-                  exception: false,
+              mutants.push(
+                deepFreeze({
+                  exception: true,
                   timeout: false,
                   inWrapped: r.input.map((i) => ({
                     tag: "ArgValueTypeWrapped",
                     value: i.value,
                   })),
-                  outWrapped:
-                    r.output[0]?.value === undefined
-                      ? outputGenerator.next()[0]
-                      : ArgDefMutator.mutate(
-                          [outputSpec],
-                          [
-                            {
-                              tag: "ArgValueTypeWrapped",
-                              value: r.output[0]?.value,
-                            },
-                          ],
-                          basis.prng
-                        )[0],
-                });
+                  outWrapped: {
+                    tag: "ArgValueTypeWrapped",
+                    value: undefined,
+                  },
+                })
+              );
+            }
+
+            // Synthesize a timeout example
+            if (!r.timeout) {
+              mutants.push(
+                deepFreeze({
+                  exception: false,
+                  timeout: true,
+                  inWrapped: r.input.map((i) => ({
+                    tag: "ArgValueTypeWrapped",
+                    value: i.value,
+                  })),
+                  outWrapped: {
+                    tag: "ArgValueTypeWrapped",
+                    value: undefined,
+                  },
+                })
+              );
+            }
+
+            // Synthesize a mutant example if we have an output spec
+            if (outputGenerator) {
+              try {
+                mutants.push(
+                  deepFreeze({
+                    exception: false,
+                    timeout: false,
+                    inWrapped: deepFreeze(
+                      r.input.map((i) => ({
+                        tag: "ArgValueTypeWrapped",
+                        value: i.value,
+                      }))
+                    ),
+                    outWrapped:
+                      r.output[0]?.value === undefined
+                        ? outputGenerator.next()[0]
+                        : ArgDefMutator.mutate(
+                            [outputSpec],
+                            [
+                              {
+                                tag: "ArgValueTypeWrapped",
+                                value: r.output[0]?.value,
+                              },
+                            ],
+                            this._basis.prng
+                          )[0],
+                  })
+                );
               } catch (_e: unknown) {
                 // Not able to mutate; move on
               }
@@ -210,22 +215,22 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
                   isException: m.exception,
                   isTimeout: m.timeout,
                   origin: {
-                    type: "unknown", // !!!!!!!!!!
+                    type: "mutator",
                   },
                   value: m.outWrapped.value,
                 },
               ];
-              const implicitJudgment: NamedJudgment = basis.results.env.options
-                .useImplicit
+              const implicitJudgment: NamedJudgment = this._basis.results.env
+                .options.useImplicit
                 ? ImplicitOracle.judge(
                     m.timeout,
                     m.exception,
-                    basis.fn.isVoid(),
+                    this._basis.fn.isVoid(),
                     mutatedOutput
                   )
                 : ImplicitOracle.unknown;
               const exampleJudgment: NamedJudgment =
-                basis.results.env.options.useHuman && r.expectedOutput
+                this._basis.results.env.options.useHuman && r.expectedOutput
                   ? ExampleOracle.judge(
                       m.timeout,
                       m.exception,
@@ -245,18 +250,18 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
               ]);
               const mutatedExample: JudgedExample = {
                 example: m,
-                source: {
+                source: deepFreeze({
                   type: "mutation",
-                  runId: basis.results.runId,
+                  runId: this._basis.results.runId,
                   testId: r.testId,
-                },
-                judgments: {
+                }),
+                judgments: deepFreeze({
                   implicit: implicitJudgment,
                   example: exampleJudgment,
                   property: propertyJudgment,
                   propertyDetail: propertyJudgmentDetail,
                   composite: compositeJudgment,
-                },
+                }),
                 addlJudgments: {},
               };
               return mutatedExample;
@@ -265,70 +270,82 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
           .flat()
       : [];
 
-    // Generate & diff the candidate property judgments
+    const propRunners: ConstructorParameters<typeof JudgmentDiffer>[2] = [];
+    try {
+      propRunners.push({
+        name: this._name,
+        runner: RunnerFactory({
+          type: "typescript.src",
+          src: this._src.join("\n"),
+          fnName: this._name,
+          fileName: path.resolve(
+            `${this._basis.fn.getModule()}.prospective.${this._name}.ts`
+          ),
+        }),
+      });
+      console.debug(
+        `created jsrunner for ${this._name} in module ${this._basis.fn.getModule()}`
+      ); // !!!!!!!!!!!
+    } catch (e: unknown) {
+      console.debug(
+        `Exception building a runner for generated validator: ${this._name}. Src: ${JSON5.stringify(this._src)}. Exception: ${isError(e) ? `${e.name}: ${e.message}` : `<unknown>`}`
+      );
+    }
+
+    const differ = new JudgmentDiffer(
+      this._basis.results.runId,
+      [...concreteExamples, ...mutatedExamples],
+      propRunners
+    );
+    console.debug(`---------------------`); // !!!!!!!!!!
+    const diff = differ.diffFor([this._name]);
+    console.debug(
+      `diff for "${this._name}": ${JSON5.stringify(
+        {
+          ...diff,
+          detail: {
+            exceptions: diff.detail.exceptions.length,
+            falseFailures: diff.detail.falseFailures.length,
+            falsePasses: diff.detail.falsePasses.length,
+            trueFailures: diff.detail.trueFailures.length,
+            truePasses: diff.detail.truePasses.length,
+            prospectiveFailures: diff.detail.prospectiveFailures.length,
+          },
+        },
+        null,
+        2
+      )}`
+    ); // !!!!!!!!!!
+    return diff;
+  }
+
+  // !!!!!!
+  public static propose(
+    basis: IdeaBasis,
+    callbackFn: (i: AbstractIdeaModel) => void
+  ): void {
+    if (
+      !LlmAdapter.isConfigured() ||
+      !vscode.workspace
+        .getConfiguration("nanofuzz.ai.properties")
+        .get<boolean>("generate", false) ||
+      !basis.results.env.options.useProperty
+    ) {
+      return;
+    }
+
+    // Generate candidate property assertions
     this._model.genProps(basis.fn, schema).then((props) => {
       console.debug(
-        `In the post-llm handler w/${concreteExamples.length} concrete example(s), ${mutatedExamples.length} mutated example(s), and these props:: ${JSON5.stringify(props, null, 2)}`
+        `In the post-llm handler w/these props:: ${JSON5.stringify(props, null, 2)}`
       ); // !!!!!!!!!!
-      const propRunners: ConstructorParameters<
-        typeof CompositeJudgmentDiff
-      >[2] = [];
       props.forEach((p) => {
-        try {
-          propRunners.push({
-            name: p.functionName,
-            runner: RunnerFactory({
-              type: "typescript.src",
-              src: p.functionSourceCode.join("\n"),
-              fnName: p.functionName,
-              fileName: path.resolve(
-                `${basis.fn.getModule()}.prospective.${p.functionName}.ts`
-              ),
-            }),
-          });
-          console.debug(`created jsrunner for ${p.functionName}`); // !!!!!!!!!!!
-        } catch (e: unknown) {
-          console.debug(
-            `Exception building a runner for generated validator: ${p.functionName}. Src: ${p.functionSourceCode}. Exception: ${isError(e) ? `${e.name}: ${e.message}` : `<unknown>`}`
-          );
-        }
-      });
-
-      const differ = new CompositeJudgmentDiff(
-        basis.results.runId,
-        [...concreteExamples, ...mutatedExamples],
-        propRunners
-      );
-      props.forEach((p) => {
-        console.debug(`---------------------`); // !!!!!!!!!!
-        const diff = differ.diffFor([p.functionName]);
-        console.debug(
-          `diff for "${p.functionName}": ${JSON5.stringify(
-            {
-              ...diff,
-              detail: {
-                exceptions: diff.detail.exceptions.length,
-                falseFailures: diff.detail.falseFailures.length,
-                falsePasses: diff.detail.falsePasses.length,
-                trueFailures: diff.detail.trueFailures.length,
-                truePasses: diff.detail.truePasses.length,
-                prospectiveFailures: diff.detail.prospectiveFailures.length,
-              },
-            },
-            null,
-            2
-          )}`
-        ); // !!!!!!!!!!
         callbackFn(
           new PropertyIdeaModel(
             {
-              type: "idea.property",
               id: p.functionName,
               name: p.functionName,
-              priority: diff.priority,
               src: p.functionSourceCode,
-              diff: diff,
-              status: "proposed",
             },
             basis
           )
@@ -338,6 +355,7 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
   }
 }
 
+// Schema for LLM output
 const schema = zod
   .array(
     zod.strictObject({

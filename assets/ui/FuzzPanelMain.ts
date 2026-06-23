@@ -520,6 +520,9 @@ function main() {
         case "put":
           src = { [srcLabel]: "pgm" };
           break;
+        case "mutator":
+          src = { [srcLabel]: "mtr" }; // should not happen
+          break;
         case "generator":
           switch (inputSrc.generator) {
             case "AiInputGenerator":

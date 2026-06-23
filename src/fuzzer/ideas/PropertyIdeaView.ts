@@ -24,9 +24,6 @@ export class PropertyIdeaView extends AbstractIdeaView {
     super(data, inputNames, ideasPanel);
     this._rep = { ...data };
     this._iconClass = "codicon codicon-robot";
-
-    console.debug(`IdeaData: ${JSON5.stringify(data)}`);
-    console.debug(`_rep: ${JSON5.stringify(this._rep)}`);
   }
 
   protected _drawSummarySquaresCell(summaryColSquares: HTMLTableCellElement) {
@@ -135,7 +132,13 @@ export class PropertyIdeaView extends AbstractIdeaView {
                       : /*html*/ `<td class="editorFont"><span>${htmlEscape(JSON5.stringify(e.example.inWrapped[i].value))}</span></td>`
                   )
                   .join("\n")}
-                <td class="editorFont"><span>${e.source.type === "mutation" ? /*html*/ `<span class="codicon codicon-bug inline" title="Mutated/buggy program test output">` : /*html*/ `<span class="codicon codicon-beaker inline" title="Actual program test output">`}</span></span><span> ${htmlEscape(JSON5.stringify(e.example.outWrapped.value))}</span></td>
+                <td class="editorFont"><span>${e.source.type === "mutation" ? /*html*/ `<span class="codicon codicon-bug inline" title="Mutated/buggy program test output">` : /*html*/ `<span class="codicon codicon-beaker inline" title="Actual program test output">`}</span></span><span> ${
+                  e.example.timeout
+                    ? "(timeout)"
+                    : e.example.exception
+                      ? "(exception)"
+                      : htmlEscape(JSON5.stringify(e.example.outWrapped.value))
+                }</span></td>
                 <td class="editorFont">${htmlEscape(
                   getExceptionMsg(e.addlJudgments[this._rep.name].error)
                 )}
