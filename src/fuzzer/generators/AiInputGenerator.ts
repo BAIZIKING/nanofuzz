@@ -228,10 +228,7 @@ export class AiInputGenerator extends AbstractInputGenerator {
    *
    * @returns JSON schema
    */
-  protected _getInputsSchema(): [
-    ReturnType<zod.ZodType["toJSONSchema"]>,
-    string[],
-  ] {
+  protected _getInputsSchema(): [zod.ZodObject, string[]] {
     const zodObj: { [k: string]: zod.ZodType } = {};
     const directives: string[] = [];
     this._specs.forEach((arg) => {
@@ -254,9 +251,7 @@ export class AiInputGenerator extends AbstractInputGenerator {
       `${NANOFUZZ_FALSE} is a placeholder for the actual value \`false\``
     );
     return [
-      zod
-        .strictObject({ programInputs: zod.array(zod.strictObject(zodObj)) })
-        .toJSONSchema(),
+      zod.strictObject({ programInputs: zod.array(zod.strictObject(zodObj)) }),
       directives,
     ];
   } // fn: _getInputsSchema
