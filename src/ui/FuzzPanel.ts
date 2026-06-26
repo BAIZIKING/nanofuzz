@@ -3660,7 +3660,7 @@ export const toolName = vscode.workspace
 /**
  * Languages supported by this module
  */
-export const languages = ["typescript", "typescriptreact"];
+export const languages = ["typescript", "typescriptreact", "python"];
 
 /**
  * The Fuzzer State Version we currently support.

@@ -23,6 +23,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:typescript",
+    "onLanguage:python",
     "onLanguage:typescriptreact",
     "onWebviewPanel:FuzzPanel"
   ],
@@ -260,7 +261,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --no-experimental-strip-types ./node_modules/jasmine/bin/jasmine.js",
+    "test": "node --no-experimental-strip-types ./node_modules/jasmine/bin/jasmine.js; pytest",
     "lint": "eslint src assets/ui",
     "lint:errors": "eslint --quiet src assets/ui",
     "vscode:prepublish": "yarn build",
