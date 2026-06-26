@@ -6,6 +6,8 @@ import { FunctionDef } from "../analysis/typescript/FunctionDef";
 import { isError } from "../../Util";
 import * as telemetry from "../../telemetry/Telemetry";
 import { getPropertyTestSkeleton } from "../analysis/typescript/Util";
+import * as zod from "zod";
+import { zodOutputFormat } from "./AnthropicUtils";
 
 /**
  * An adapter for chatting with an LLM about the program under test
@@ -75,7 +77,7 @@ export class LlmAdapter {
    */
   public async genInputs(
     fn: FunctionDef,
-    schema?: [Parameters<typeof this._chat.withSchema>[0], string[]]
+    schema?: [zod.ZodObject, string[]]
   ): Promise<{
     programInputs: { [k: string]: ArgValueType }[];
     stats?: Awaited<ReturnType<LlmAdapter["_query"]>>["stats"];
@@ -136,13 +138,18 @@ export class LlmAdapter {
    */
   public async genProps(
     fn: FunctionDef,
-    schema?: Parameters<typeof this._chat.withSchema>[0]
+    schema?: zod.ZodArray
   ): Promise<{ functionSourceCode: string[]; functionName: string }[]> {
     try {
       const response = await this._query(
         [prompt.genProps(this._getPromptVars(fn, []))],
         schema
       );
+
+      // const response = await this._query(
+      //   [prompt.genProps(this._getPromptVars(fn, []))],
+      //   schema
+      // );
       const props: unknown = JSON5.parse(response.response);
       if (
         Array.isArray(props) &&
@@ -204,7 +211,7 @@ export class LlmAdapter {
    */
   private async _query(
     prompt: string[],
-    schema?: Parameters<typeof this._chat.withSchema>[0]
+    schema?: zod.ZodObject | zod.ZodArray
   ): Promise<{
     response: string;
     stats: {
@@ -223,24 +230,36 @@ export class LlmAdapter {
         text: e,
       });
     });
+
+    const provider = LlmAdapter._getConfig().provider;
     vscode.commands.executeCommand(
       telemetry.commands.logTelemetry.name,
       new telemetry.LoggerEntry(
         "LlmAdapter.query.send",
         "Sending query to LLM (v=%s;m=%s). Query: %s.",
-        [
-          LlmAdapter._getConfig().provider,
-          LlmAdapter._getConfig().modelName,
-          prompt.join("\n"),
-        ]
+        [provider, LlmAdapter._getConfig().modelName, prompt.join("\n")]
       )
     );
 
-    const response = await (schema ? this._chat.withSchema(schema) : this._chat)
-      .withRequestOptions({
-        responseFormat: { type: "json_object" },
-      })
-      .ask(promptParts);
+    let chat = (
+      schema ? this._chat.withSchema(schema.toJSONSchema()) : this._chat
+    ).withRequestOptions({
+      responseFormat: { type: "json_object" },
+    });
+
+    // Provider specific settings
+    if (provider === "anthropic") {
+      if (schema) {
+        // Anthropic doesn't always respect responseFormat
+        chat = chat.withParams({
+          output_config: {
+            format: zodOutputFormat(schema),
+          },
+        });
+      }
+    }
+
+    const response = await chat.ask(promptParts);
 
     vscode.commands.executeCommand(
       telemetry.commands.logTelemetry.name,
