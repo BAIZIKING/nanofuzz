@@ -23,6 +23,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:typescript",
+    "onLanguage:python",
     "onLanguage:typescriptreact",
     "onWebviewPanel:FuzzPanel"
   ],
