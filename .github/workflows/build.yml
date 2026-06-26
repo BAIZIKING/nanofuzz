@@ -22,8 +22,10 @@ jobs:
         run: yarn
       - name: Run all builds
         run: yarn build
-      - name: Run all tests
+      - name: Run TypeScript tests
         run: yarn test
+      - name: Run Python tests
+        run: pytest
 
       # npm runtime package
       - name: Install packages

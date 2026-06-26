@@ -122,3 +122,5 @@ dist
 # direnv files
 /.direnv/
 /.envrc
+src/fuzzer/oracles/__pycache__/ImplicitOracle_test.cpython-311-pytest-7.2.2.pyc
+src/fuzzer/oracles/__pycache__/ImplicitOracle.cpython-311.pyc
