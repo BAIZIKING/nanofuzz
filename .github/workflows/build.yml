@@ -30,7 +30,7 @@ jobs:
         run: yarn
       - name: Run all builds
         run: yarn build
-      - name: Run TypeScript tests
+      - name: Run Typescript tests
         run: yarn test
       - name: Run Python tests
         run: pytest

@@ -261,7 +261,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --no-experimental-strip-types ./node_modules/jasmine/bin/jasmine.js; pytest",
+    "test": "node --no-experimental-strip-types ./node_modules/jasmine/bin/jasmine.js",
     "lint": "eslint src assets/ui",
     "lint:errors": "eslint --quiet src assets/ui",
     "vscode:prepublish": "yarn build",
