@@ -356,24 +356,22 @@ export class PropertyIdeaModel extends AbstractIdeaModel {
 }
 
 // Schema for LLM output
-const schema = zod
-  .array(
-    zod.strictObject({
-      functionSourceCode: zod
-        .array(
-          zod
-            .string()
-            .describe(
-              `One line of source code. Preserve whitespace and comments.`
-            )
-        )
-        .describe(
-          `Property assertion function source code organized as an array of source code lines that include the function signature and the docstring comment. The function must return \`"pass" | "fail" | "unknown"\``
-        ),
-      functionName: zod.string().describe(`Callable name of the function`),
-    })
-  )
-  .toJSONSchema();
+const schema = zod.array(
+  zod.strictObject({
+    functionSourceCode: zod
+      .array(
+        zod
+          .string()
+          .describe(
+            `One line of source code. Preserve whitespace and comments.`
+          )
+      )
+      .describe(
+        `Property assertion function source code organized as an array of source code lines that include the function signature and the docstring comment. The function must return \`"pass" | "fail" | "unknown"\``
+      ),
+    functionName: zod.string().describe(`Callable name of the function`),
+  })
+);
 
 export type PropertyIdeaData = AbstractIdeaData & {
   type: "idea.property";
