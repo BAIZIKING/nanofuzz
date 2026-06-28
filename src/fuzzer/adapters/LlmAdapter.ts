@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import * as JSON5 from "json5";
 import * as nodellm from "@node-llm/core";
-import { ArgValueType } from "../analysis/typescript/Types";
-import { FunctionDef } from "../analysis/typescript/FunctionDef";
+import { ArgValueType } from "../analysis/Types";
+import { FunctionDef } from "../analysis/FunctionDef";
 import { isError } from "../../Util";
 import * as telemetry from "../../telemetry/Telemetry";
-import { getPropertyTestSkeleton } from "../analysis/typescript/Util";
+import { getPropertyTestSkeleton } from "../analysis/Util"; // !!!!!!!!!! wrong location
 import * as zod from "zod";
 import { zodOutputFormat } from "./AnthropicUtils";
 

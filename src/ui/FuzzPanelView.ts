@@ -25,13 +25,13 @@ import {
   ArgValueType,
   ArgValueTypeWrapped,
   FuzzTestResults,
-} from "../../src/fuzzer/Fuzzer";
+} from "../fuzzer/Fuzzer";
 import {
   FuzzPanelFuzzRunMessage,
   FuzzPanelMessageToWebView,
   FuzzPanelMessageFromWebView,
   FuzzPanelPinMessage,
-} from "../../src/ui/FuzzPanel";
+} from "../../src/ui/FuzzPanelController";
 import { IdeasPanelView } from "./IdeasPanelView";
 
 const vscode = acquireVsCodeApi();

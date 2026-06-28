@@ -5,7 +5,7 @@ import * as fs from "fs";
 import { htmlEscape } from "escape-goat";
 import * as telemetry from "../telemetry/Telemetry";
 import * as jestadapter from "../fuzzer/adapters/JestAdapter";
-import { ProgramDef } from "../fuzzer/analysis/typescript/ProgramDef";
+import { TypescriptProgram } from "../fuzzer/analysis/typescript/TypescriptProgram";
 import { isError, getErrorMessageOrJson } from "../Util";
 import { Listener } from "../extension";
 import { Tester } from "../fuzzer/Fuzzer";
@@ -15,7 +15,7 @@ import {
 } from "./CoverageHeatmap";
 import { normalizePathForKey } from "../fuzzer/Util";
 import { CodeCoverageMeasureStats } from "../fuzzer/measures/CoverageMeasure";
-import { getPropertyTestSkeleton } from "../fuzzer/analysis/typescript/Util";
+import { getPropertyTestSkeleton } from "../fuzzer/analysis/Util";
 import { IdeasPanelController } from "./IdeasPanelController";
 import seedrandom from "seedrandom";
 import { IdeaData } from "../fuzzer/ideas/Types";
@@ -30,7 +30,7 @@ import { IdeaData } from "../fuzzer/ideas/Types";
  *
  * For its user interface, this extension relies on the VS Code Webview
  * API and WebView controls.  Client-side Javascript is contained in
- * a separate FuzzPanelMain.ts.
+ * a separate FuzzPanelView.ts.
  */
 export class FuzzPanel {
   // Static variables
@@ -112,7 +112,7 @@ export class FuzzPanel {
       );
       panel.iconPath = vscode.Uri.joinPath(
         extensionUri,
-        "assets",
+        "build",
         "ui",
         "icon.svg"
       );
@@ -141,6 +141,14 @@ export class FuzzPanel {
     state: FuzzPanelStateSerialized
   ): void {
     let fuzzPanel: FuzzPanel | undefined;
+
+    // Update the icon on the panel
+    panel.iconPath = vscode.Uri.joinPath(
+      extensionUri,
+      "build",
+      "ui",
+      "icon.svg"
+    );
 
     // Revive the FuzzPanel using the previous state
     if (
@@ -222,7 +230,7 @@ export class FuzzPanel {
       retainContextWhenHidden: true,
 
       // Restrict the webview to only loading extension content.
-      // !!! localResourceRoots: [vscode.Uri.joinPath(extensionUri, "assets", "ui")],
+      // !!! localResourceRoots: [vscode.Uri.joinPath(extensionUri, "build", "ui")],
     };
   }
 
@@ -331,7 +339,7 @@ export class FuzzPanel {
       this._errorStack = error.stack ? htmlEscape(error.stack) : undefined;
 
       // Compiler-specific detailed messages
-      if (error instanceof fuzzer.TscCompilerError) {
+      if (error instanceof fuzzer.TypescriptCompilerError) {
         this._errorMessage += `<p style="margin-bottom:0.25em;"><strong>Source file</strong></p><small><pre style="margin-top:0;">${htmlEscape(error.details.inputFile)}</pre></small>`;
         if (error.details.output && error.details.output.length) {
           this._errorMessage += `<p style="margin-bottom:0.25em;"><strong>Compiler output</strong></p><small><pre style="margin-top:0;">${error.details.output.map((e) => htmlEscape(e)).join("")}</pre></small>`;
@@ -914,10 +922,10 @@ export class FuzzPanel {
 
     const fn = this._fuzzEnv.function; // Function under test
     const module = this._fuzzEnv.function.getModule();
-    let program: ProgramDef;
+    let program: TypescriptProgram;
 
     try {
-      program = ProgramDef.fromModule(module);
+      program = TypescriptProgram.fromModule(module);
     } catch (_e: unknown) {
       vscode.window.showErrorMessage(
         `Unable to add the validator. TypeScript source file cannot be parsed. ${this._fuzzEnv.function.getModule()}`
@@ -996,7 +1004,7 @@ ${src}`;
 
       // Change focus to the generated validator
       try {
-        const fn = ProgramDef.fromModule(module).getFunctions()[name];
+        const fn = TypescriptProgram.fromModule(module).getFunctions()[name];
         this._navigateToSource(fn.getModule(), fn.getStartOffset());
       } catch (_e: unknown) {
         vscode.window.showErrorMessage(
@@ -1016,10 +1024,12 @@ ${src}`;
    * of validators from the program source code and sends it back to the
    * front-end.
    */
-  public _doGetValidators() {
-    let program: ProgramDef;
+  private _doGetValidators() {
+    let program: TypescriptProgram;
     try {
-      program = ProgramDef.fromModule(this._fuzzEnv.function.getModule());
+      program = TypescriptProgram.fromModule(
+        this._fuzzEnv.function.getModule()
+      );
     } catch (e: unknown) {
       const errorMessage = getErrorMessageOrJson(e);
       vscode.commands.executeCommand(
@@ -1604,12 +1614,12 @@ ${src}`;
             <script type="module" src="${getUri(webview, extensionUri, [
               "build",
               "ui",
-              "FuzzPanelMain.js",
+              "FuzzPanelView.js",
             ])}"></script>
             <link rel="stylesheet" type="text/css" href="${getUri(
               webview,
               extensionUri,
-              ["assets", "ui", "FuzzPanelMain.css"]
+              ["build", "ui", "FuzzPanelView.css"]
             )}">
             <link rel="stylesheet" type="text/css" href="${getUri(
               webview,
@@ -3315,8 +3325,9 @@ export function provideCodeLenses(
 ): vscode.CodeLens[] {
   const codeLenses: vscode.CodeLens[] = [];
   try {
-    const program = ProgramDef.fromModuleAndSource(document.fileName, () =>
-      document.getText()
+    const program = TypescriptProgram.fromModuleAndSource(
+      document.fileName,
+      () => document.getText()
     );
 
     // Skip analyzing files that we are configured to ignore

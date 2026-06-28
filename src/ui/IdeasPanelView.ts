@@ -1,6 +1,6 @@
 import * as JSON5 from "json5";
 import { getElementByIdOrThrow, hide, show } from "./Util";
-import { FuzzPanelMessageFromWebView } from "../../src/ui/FuzzPanel";
+import { FuzzPanelMessageFromWebView } from "./FuzzPanelController";
 import { WebviewApi } from "vscode-webview";
 import { AbstractIdeaView } from "../../src/fuzzer/ideas/AbstractIdeaView";
 import { IdeaData } from "../../src/fuzzer/ideas/Types";
