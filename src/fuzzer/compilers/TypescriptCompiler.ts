@@ -16,13 +16,13 @@ import { Worker } from "worker_threads";
 import path from "path";
 import os from "os";
 import JSON5 from "json5";
-import { AbstractMeasure } from "./measures/AbstractMeasure";
+import { AbstractMeasure } from "../measures/AbstractMeasure";
 import {
   FuzzBusyStatusMessage,
-  TscCompilerError,
-  TscCompilerErrorDetails,
+  TypescriptCompilerError,
+  TypescriptCompilerErrorDetails,
   VmGlobals,
-} from "./Types";
+} from "../Types";
 
 // Global list of compilations by entrypoint module
 const _compilationsByModule: {
@@ -45,7 +45,7 @@ const _pendingCompilations: {
 /**
  * A TypeScript compiler wrapper for tsc.
  */
-export class TypeScriptCompiler {
+export class TypescriptCompiler {
   protected _tscPath: string; // Path to tsc
   protected _tscVersion: string; // tsc version
   protected _moduleFile: string; // Path to a module within a project
@@ -96,7 +96,7 @@ export class TypeScriptCompiler {
       // Handle messages from the worker
       compilerWorker.on(
         "message",
-        (message: TypeScriptCompilerMessageFromWorker) => {
+        (message: TypescriptCompilerMessageFromWorker) => {
           switch (message.command) {
             case "compile.result":
               if (message.id in _pendingCompilations) {
@@ -497,7 +497,7 @@ export class TypeScriptCompiler {
     });
 
     if (exitCode !== 0) {
-      const e = new TscCompilerError(
+      const e = new TypescriptCompilerError(
         `Unable to compile TypeScript file. Please check it for errors.`,
         {
           inputFile: module.filename,
@@ -979,12 +979,12 @@ export type TypeScriptCompilerMessageToWorker =
 /**
  * Messages from the worker to the Compiler
  */
-export type TypeScriptCompilerMessageFromWorker = {
+export type TypescriptCompilerMessageFromWorker = {
   command: "compile.result";
   id: number;
 } & (
   | { success: true }
-  | ({ success: false } & Partial<TscCompilerErrorDetails>)
+  | ({ success: false } & Partial<TypescriptCompilerErrorDetails>)
 );
 
 // Version of the compilation record file
