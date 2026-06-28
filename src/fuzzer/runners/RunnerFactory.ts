@@ -1,7 +1,7 @@
 import { AbstractRunner } from "./AbstractRunner";
 import { JSRunner } from "./JSRunner";
 import req from "require-from-string";
-import { TypeScriptCompiler } from "../Compiler";
+import { TypescriptCompiler } from "../compilers/TypescriptCompiler";
 
 /**
  * Returns an AbstractRunner appropriate to the input environment, module,
@@ -45,7 +45,7 @@ function tsSrcToRunner(
   fileName?: string
 ): JSRunner {
   return jsSrcToRunner(
-    TypeScriptCompiler.compileInMemory(tsSrc),
+    TypescriptCompiler.compileInMemory(tsSrc),
     fnName,
     fileName
   );

@@ -1624,7 +1624,7 @@ ${src}`;
             <link rel="stylesheet" type="text/css" href="${getUri(
               webview,
               extensionUri,
-              ["assets", "ui", "IdeasPanelView.css"]
+              ["build", "ui", "IdeasPanelView.css"]
             )}">
             <title>${toolName} Panel</title>
           </head>

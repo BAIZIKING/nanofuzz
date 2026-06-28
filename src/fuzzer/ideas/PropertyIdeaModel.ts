@@ -16,8 +16,8 @@ import { ImplicitOracle } from "../oracles/ImplicitOracle";
 import { ExampleOracle } from "../oracles/ExampleOracle";
 import { PropertyOracle } from "../oracles/PropertyOracle";
 import { propertyOracleFromNodeModule } from "../oracles/Util";
-import { ArgDefGenerator } from "../analysis/typescript/ArgDefGenerator";
-import { ArgDefMutator } from "../analysis/typescript/ArgDefMutator";
+import { ArgDefGenerator } from "../analysis/ArgDefGenerator";
+import { ArgDefMutator } from "../analysis/ArgDefMutator";
 import {
   AbstractIdeaData,
   AbstractIdeaModel,

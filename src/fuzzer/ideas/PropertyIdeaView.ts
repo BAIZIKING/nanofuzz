@@ -9,9 +9,9 @@ import {
   isHidden,
   judgmentToIcon,
   toggleHidden,
-} from "../../../assets/ui/Util";
+} from "../../ui/Util";
 import { traceJudgment } from "../../ui/JudgmentTrace";
-import { IdeasPanelView } from "../../../assets/ui/IdeasPanelView";
+import { IdeasPanelView } from "../../ui/IdeasPanelView";
 
 export class PropertyIdeaView extends AbstractIdeaView {
   protected _rep: PropertyIdeaData;

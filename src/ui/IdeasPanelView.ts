@@ -2,10 +2,10 @@ import * as JSON5 from "json5";
 import { getElementByIdOrThrow, hide, show } from "./Util";
 import { FuzzPanelMessageFromWebView } from "./FuzzPanelController";
 import { WebviewApi } from "vscode-webview";
-import { AbstractIdeaView } from "../../src/fuzzer/ideas/AbstractIdeaView";
-import { IdeaData } from "../../src/fuzzer/ideas/Types";
-import { IdeaViewFactory } from "../../src/fuzzer/ideas/IdeaViewFactory";
-import { AbstractIdeaData } from "../../src/fuzzer/ideas/AbstractIdeaModel";
+import { AbstractIdeaView } from "../fuzzer/ideas/AbstractIdeaView";
+import { IdeaData } from "../fuzzer/ideas/Types";
+import { IdeaViewFactory } from "../fuzzer/ideas/IdeaViewFactory";
+import { AbstractIdeaData } from "../fuzzer/ideas/AbstractIdeaModel";
 
 // Ideas Panel View
 export class IdeasPanelView {

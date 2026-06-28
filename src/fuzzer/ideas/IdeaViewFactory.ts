@@ -1,4 +1,4 @@
-import { IdeasPanelView } from "../../../assets/ui/IdeasPanelView";
+import { IdeasPanelView } from "../../ui/IdeasPanelView";
 import { AbstractIdeaView } from "./AbstractIdeaView";
 import { PropertyIdeaView } from "./PropertyIdeaView";
 import { IdeaData } from "./Types";

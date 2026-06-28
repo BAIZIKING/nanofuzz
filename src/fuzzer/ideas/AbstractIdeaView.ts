@@ -1,11 +1,5 @@
-import { IdeasPanelView } from "../../../assets/ui/IdeasPanelView";
-import {
-  hide,
-  htmlEscape,
-  isHidden,
-  show,
-  simpleToast,
-} from "../../../assets/ui/Util";
+import { IdeasPanelView } from "../../ui/IdeasPanelView";
+import { hide, htmlEscape, isHidden, show, simpleToast } from "../../ui/Util";
 import { AbstractIdeaData } from "./AbstractIdeaModel";
 
 export abstract class AbstractIdeaView {
