@@ -1,6 +1,7 @@
 import { FuzzEnv } from "../Fuzzer";
 import { AbstractRunner } from "./AbstractRunner";
-import { JSRunner } from "./JSRunner";
+import { JavascriptRunner } from "./JavascriptRunner";
+import { PythonRunner } from "./PythonRunner";
 
 /**
  * Returns an AbstractRunner appropriate to the input environment, module,
@@ -13,8 +14,16 @@ import { JSRunner } from "./JSRunner";
  */
 export function RunnerFactory(
   _env: FuzzEnv,
-  module: NodeJS.Module,
-  jsFn: string
+  module: NodeJS.Module | string,
+  fn: string
 ): AbstractRunner {
-  return new JSRunner(module, jsFn);
+  if (typeof module === "string") {
+    if (module.endsWith(".py")) {
+      return new PythonRunner(module, fn);
+    } else {
+      throw new Error("Not yet implemented");
+    }
+  } else {
+    return new JavascriptRunner(module, fn);
+  }
 } // fn: RunnerFactory

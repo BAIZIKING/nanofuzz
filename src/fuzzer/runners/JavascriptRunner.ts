@@ -5,7 +5,9 @@ import vm from "vm";
 /**
  * Javascript test runner
  */
-export class JSRunner extends AbstractRunner {
+export class JavascriptRunner extends AbstractRunner {
+  protected readonly _module: NodeJS.Module; // Node module
+  protected readonly _jsFn: string; // Function to call
   protected _fnWrapper: any; // wrapper function for calling `jsFn`
 
   /**
@@ -15,7 +17,10 @@ export class JSRunner extends AbstractRunner {
    * @param `jsFn` exported function within `module` to call
    */
   public constructor(module: NodeJS.Module, jsFn: string) {
-    super(module, jsFn);
+    super(jsFn);
+
+    this._module = module;
+    this._jsFn = jsFn;
 
     // Ensure we found an export module member
     if (!(jsFn in module)) {
@@ -93,4 +98,4 @@ export class JSRunner extends AbstractRunner {
     // Return the wrapped function for calling
     return wrappedFunction;
   } // fn: functionTimeout()
-} // class: JSRunner
+} // class: JavascriptRunner
