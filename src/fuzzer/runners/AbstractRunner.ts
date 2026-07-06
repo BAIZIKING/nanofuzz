@@ -4,8 +4,7 @@ import { VmGlobals } from "../Types";
  * Abstract test runner class
  */
 export abstract class AbstractRunner {
-  protected readonly _module: NodeJS.Module; // Node module
-  protected readonly _jsFn: string; // Function to call
+  protected readonly _name: string;
 
   /**
    * Creates a new test runner for a given module and exported module function.
@@ -13,16 +12,15 @@ export abstract class AbstractRunner {
    * @param `module` loaded program module
    * @param `jsFn` exported function within `module` to call
    */
-  public constructor(module: NodeJS.Module, jsFn: string) {
-    this._module = module;
-    this._jsFn = jsFn;
+  public constructor(name: string) {
+    this._name = name;
   } // fn: constructor
 
   /**
    * Returns the measure's name
    */
   public get name(): string {
-    return this.constructor.name;
+    return this._name;
   } // property: get name
 
   /**
