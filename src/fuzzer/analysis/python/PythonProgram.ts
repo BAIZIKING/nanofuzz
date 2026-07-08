@@ -1,14 +1,80 @@
 import { spawnSync } from "child_process";
 import { AbstractProgram } from "../AbstractProgram";
-import { ProgramImports, IdentifierName, TypeRef, ArgOptions } from "../Types";
+import {
+  ProgramImports,
+  IdentifierName,
+  TypeRef,
+  ArgOptions,
+  ArgTag,
+} from "../Types";
 //import { string } from "zod";
 
 type PythonAst = Record<string, unknown>;
 const pythonAsts = new WeakMap<PythonProgram, PythonAst>();
-// type PythonAstNode = {
-//   _type?: string;
-//   [key: string]: any;
-// };
+
+//PYTHON_TYPE_MAP will map python classes into ArgTag types
+const PYTHON_TYPE_MAP: Map<string, ArgTag> = new Map([
+  // Numeric
+  ["int", ArgTag.NUMBER],
+  ["float", ArgTag.NUMBER],
+  ["complex", ArgTag.NUMBER],
+
+  // String-like
+  ["str", ArgTag.STRING],
+  ["bytes", ArgTag.STRING],
+  ["bytearray", ArgTag.STRING],
+  ["memoryview", ArgTag.STRING],
+
+  // Boolean
+  ["bool", ArgTag.BOOLEAN],
+
+  // Containers
+  ["list", ArgTag.OBJECT],
+  ["List", ArgTag.OBJECT],
+  ["dict", ArgTag.OBJECT],
+  ["Dict", ArgTag.OBJECT],
+  ["set", ArgTag.OBJECT],
+  ["Set", ArgTag.OBJECT],
+  ["frozenset", ArgTag.OBJECT],
+  ["tuple", ArgTag.TUPLE],
+  ["Tuple", ArgTag.TUPLE],
+
+  // Typing module
+  ["Sequence", ArgTag.OBJECT],
+  ["MutableSequence", ArgTag.OBJECT],
+  ["Iterable", ArgTag.OBJECT],
+  ["Iterator", ArgTag.OBJECT],
+  ["Collection", ArgTag.OBJECT],
+  ["Mapping", ArgTag.OBJECT],
+  ["MutableMapping", ArgTag.OBJECT],
+  ["MappingView", ArgTag.OBJECT],
+  ["KeysView", ArgTag.OBJECT],
+  ["ValuesView", ArgTag.OBJECT],
+  ["ItemsView", ArgTag.OBJECT],
+
+  // Unions
+  ["Union", ArgTag.UNION],
+  ["Optional", ArgTag.UNION],
+
+  // Literals
+  ["Literal", ArgTag.LITERAL],
+
+  // Generic object types
+  ["object", ArgTag.OBJECT],
+  ["Any", ArgTag.OBJECT],
+  ["Callable", ArgTag.OBJECT],
+  ["Type", ArgTag.OBJECT],
+  ["Generic", ArgTag.OBJECT],
+  ["Protocol", ArgTag.OBJECT],
+
+  // Enums
+  ["Enum", ArgTag.OBJECT],
+  ["IntEnum", ArgTag.OBJECT],
+
+  // Special
+  ["None", ArgTag.LITERAL],
+  ["NoneType", ArgTag.LITERAL],
+]);
 
 export class PythonProgram extends AbstractProgram {
   public readonly lang = "python";
@@ -141,33 +207,130 @@ export class PythonProgram extends AbstractProgram {
 
   //Temporary change to public
   public _findTypes(): Record<IdentifierName, TypeRef> {
-    /**Function returns a mapping of types to reference describing that type
-     *
-     */
-
     const types: Record<string, TypeRef> = {};
 
-    // return empty if args is none or ast tree is none
+    // Check if the AST is valid
     if (!this.ast || !Array.isArray(this.ast.body)) {
       return types;
     }
 
+    // User-defined classes and aliases
     for (const node of this.ast.body) {
       if (node._type === "ClassDef") {
         const className = node.name;
 
-        //populate the record
         types[className] = {
           module: this.filename,
           name: className,
           optional: false,
           dims: 0,
           isExported: true,
+          type: {
+            type: ArgTag.OBJECT,
+            dims: 0,
+            children: [],
+            resolved: true,
+          },
         };
+      }
+      //AST has an assign map w/ targets: ..., value:.... for a type alias in the format of
+      // Name = type
+
+      if (node._type === "Assign") {
+        const targets = node.targets;
+        const value = node.value;
+
+        //Check if valid format
+        if (
+          Array.isArray(targets) &&
+          targets.length === 1 &&
+          targets[0]._type === "Name" &&
+          value?._type === "Name"
+        ) {
+          const aliasName = targets[0].id;
+          const originalTypeName = value.id;
+
+          const tag = PYTHON_TYPE_MAP.get(originalTypeName);
+
+          if (tag) {
+            types[aliasName] = {
+              module: this.filename,
+              name: aliasName,
+              optional: false,
+              dims: 0,
+              isExported: true,
+              type: {
+                type: tag,
+                dims: 0,
+                children: [],
+                resolved: true,
+              },
+            };
+          }
+        }
       }
     }
 
     return types;
+  }
+
+  private _typeRefFromAnnotation(
+    annotation: any,
+    name: string,
+    isExported = false
+  ): TypeRef {
+    // No annotation means Python did not give us a type. Return an unresolved
+    // TypeRef so the normal resolver path can mark the function unsupported.
+    if (!annotation) {
+      return {
+        module: this.filename,
+        name,
+        optional: false,
+        dims: 0,
+        isExported,
+      };
+    }
+
+    // Simple annotations like "int", "str", and "User" show up as Name nodes.
+    // Built-ins become concrete ArgTags; custom names stay as typeRefName.
+    if (annotation._type === "Name") {
+      const tag = PYTHON_TYPE_MAP.get(annotation.id);
+
+      if (tag) {
+        return {
+          module: this.filename,
+          name,
+          optional: false,
+          dims: 0,
+          isExported,
+          type: {
+            type: tag,
+            dims: 0,
+            children: [],
+            resolved: true,
+          },
+        };
+      }
+
+      return {
+        module: this.filename,
+        name,
+        typeRefName: annotation.id,
+        optional: false,
+        dims: 0,
+        isExported,
+      };
+    }
+
+    // More complex annotations, like list[int], can be added here later.
+    // For now, leave them unresolved instead of guessing incorrectly.
+    return {
+      module: this.filename,
+      name,
+      optional: false,
+      dims: 0,
+      isExported,
+    };
   }
 
   public _findFunctions(): typeof this._functions {
@@ -187,7 +350,20 @@ export class PythonProgram extends AbstractProgram {
     for (const node of ast.body) {
       if (node._type === "FunctionDef") {
         const funcName = node.name;
-        //Populate the Record by the FunctionDef required schema
+        const args: TypeRef[] = [];
+
+        for (const arg of node.args?.args ?? []) {
+          if (arg.arg === "self") {
+            continue;
+          }
+
+          args.push(this._typeRefFromAnnotation(arg.annotation, arg.arg));
+        }
+
+        const returnType = node.returns
+          ? this._typeRefFromAnnotation(node.returns, "return")
+          : undefined;
+
         function_ref.supported[funcName] = {
           module: this.filename,
           name: funcName,
@@ -196,8 +372,8 @@ export class PythonProgram extends AbstractProgram {
           endOffset: node.end_lineno ?? 0,
           isExported: !funcName.startsWith("_"),
           isVoid: node.returns === null,
-          args: [],
-          returnType: undefined,
+          args,
+          returnType,
         };
       }
     }
@@ -211,6 +387,33 @@ export class PythonProgram extends AbstractProgram {
   }
 
   public _resolveTypeRef(t: TypeRef): TypeRef {
+    /**Converts a named reference into a concrete fuzzable type from the TypeRef objects created earlier */
+
+    // Case 1: t already has a t.type -> check on its children
+    if (t.type) {
+      for (const child of t.type.children) {
+        this._resolveTypeRef(child);
+      }
+      t.type.resolved = true;
+      return t;
+    }
+
+    if (!t.typeRefName) {
+      throw new Error(`Unable to resolve TypeRef without typeRefName`);
+    }
+    // Actual TypeRef Format lookup
+    const resolved = this._types[t.typeRefName];
+    //Make sure resolved exist
+    if (!resolved || !resolved.type) {
+      throw new Error(`Unable to resolve type ${t.typeRefName}`);
+    }
+
+    t.type = structuredClone(resolved.type);
+    // Recurse on children
+    for (const children of t.type.children) {
+      this._resolveTypeRef(children);
+    }
+    t.type.resolved = true;
     return t;
   }
 }
@@ -269,7 +472,9 @@ def maybe_get_user(flag: bool) -> Optional[User]:
   const program = new PythonProgram(() => source, "example.py");
   console.log(JSON.stringify(program.ast, null, 2));
   console.log("####\n\n");
-  console.log(program._findImports());
-  console.log(program._findTypes());
-  console.log(program._findFunctions());
+  //console.log(program._findImports());
+  // console.log(program._findTypes());
+  console.log("$$$$\n");
+  // console.log(program._findFunctions());
+  console.log(JSON.stringify(program._findFunctions(), null, 2));
 }
