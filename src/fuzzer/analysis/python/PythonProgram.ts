@@ -7,78 +7,212 @@ import {
   ArgOptions,
   ArgTag,
 } from "../Types";
-//import { string } from "zod";
 
-type PythonAst = Record<string, unknown>;
-const pythonAsts = new WeakMap<PythonProgram, PythonAst>();
+//Type ALIAS
 
-//PYTHON_TYPE_MAP will map python classes into ArgTag types
-const PYTHON_TYPE_MAP: Map<string, ArgTag> = new Map([
-  // Numeric
+type PythonSourcePosition = {
+  lineno?: number;
+  col_offset?: number;
+  end_lineno?: number;
+  end_col_offset?: number;
+};
+
+type PythonAliasNode = PythonSourcePosition & {
+  _type: "alias";
+  name: string;
+  asname: string | null;
+};
+
+type PythonImportNode = PythonSourcePosition & {
+  _type: "Import";
+  names: PythonAliasNode[];
+};
+
+type PythonImportFromNode = PythonSourcePosition & {
+  _type: "ImportFrom";
+  module: string | null;
+  names: PythonAliasNode[];
+  level: number;
+};
+
+type PythonAnnotationNode = PythonSourcePosition & {
+  _type: string;
+  attr?: string;
+  elts?: PythonAnnotationNode[];
+  id?: string;
+  slice?: PythonAnnotationNode | null;
+  value?: PythonAnnotationNode | null;
+};
+
+type PythonFunctionArgsNode = {
+  args?: PythonFunctionArgNode[];
+};
+
+type PythonFunctionArgNode = {
+  arg: string;
+  annotation?: PythonAnnotationNode | null;
+};
+
+type PythonOtherNode = PythonSourcePosition & {
+  _type: Exclude<string, "Import" | "ImportFrom">;
+  annotation?: PythonAnnotationNode | null;
+  args?: PythonFunctionArgsNode;
+  body?: PythonASTNode[];
+  name?: string;
+  returns?: PythonAnnotationNode | null;
+  target?: PythonAnnotationNode | null;
+  targets?: PythonAnnotationNode[];
+  value?: PythonAnnotationNode | null;
+};
+
+type PythonASTNode = PythonImportNode | PythonImportFromNode | PythonOtherNode;
+
+type PythonModuleNode = {
+  _type: "Module";
+  body: PythonASTNode[];
+  type_ignores: unknown[];
+};
+
+//mapping of types
+
+const PYTHON_TYPE_MAP = new Map<string, ArgTag>([
+  // Primitive types
   ["int", ArgTag.NUMBER],
   ["float", ArgTag.NUMBER],
   ["complex", ArgTag.NUMBER],
 
-  // String-like
   ["str", ArgTag.STRING],
-  ["bytes", ArgTag.STRING],
-  ["bytearray", ArgTag.STRING],
-  ["memoryview", ArgTag.STRING],
 
-  // Boolean
   ["bool", ArgTag.BOOLEAN],
 
-  // Containers
+  // Container types
   ["list", ArgTag.OBJECT],
   ["List", ArgTag.OBJECT],
+
   ["dict", ArgTag.OBJECT],
   ["Dict", ArgTag.OBJECT],
+
   ["set", ArgTag.OBJECT],
   ["Set", ArgTag.OBJECT],
-  ["frozenset", ArgTag.OBJECT],
+
+  // Structured types
   ["tuple", ArgTag.TUPLE],
   ["Tuple", ArgTag.TUPLE],
 
-  // Typing module
-  ["Sequence", ArgTag.OBJECT],
-  ["MutableSequence", ArgTag.OBJECT],
-  ["Iterable", ArgTag.OBJECT],
-  ["Iterator", ArgTag.OBJECT],
-  ["Collection", ArgTag.OBJECT],
-  ["Mapping", ArgTag.OBJECT],
-  ["MutableMapping", ArgTag.OBJECT],
-  ["MappingView", ArgTag.OBJECT],
-  ["KeysView", ArgTag.OBJECT],
-  ["ValuesView", ArgTag.OBJECT],
-  ["ItemsView", ArgTag.OBJECT],
-
-  // Unions
+  // Special typing constructs
+  ["Literal", ArgTag.LITERAL],
   ["Union", ArgTag.UNION],
   ["Optional", ArgTag.UNION],
 
-  // Literals
-  ["Literal", ArgTag.LITERAL],
-
-  // Generic object types
+  // Fallback-ish builtins
   ["object", ArgTag.OBJECT],
-  ["Any", ArgTag.OBJECT],
-  ["Callable", ArgTag.OBJECT],
-  ["Type", ArgTag.OBJECT],
-  ["Generic", ArgTag.OBJECT],
-  ["Protocol", ArgTag.OBJECT],
-
-  // Enums
-  ["Enum", ArgTag.OBJECT],
-  ["IntEnum", ArgTag.OBJECT],
-
-  // Special
-  ["None", ArgTag.LITERAL],
-  ["NoneType", ArgTag.LITERAL],
+  ["Any", ArgTag.UNRESOLVED],
+  ["None", ArgTag.UNRESOLVED],
 ]);
+
+function isImportFromNode(node: PythonASTNode): node is PythonImportFromNode {
+  return node._type === "ImportFrom";
+}
+
+function isImportNode(node: PythonASTNode): node is PythonImportNode {
+  return node._type === "Import";
+}
+
+function findChildrenAnnotation(
+  annotation: PythonAnnotationNode | null | undefined
+): string | undefined {
+  if (!annotation) {
+    return undefined;
+  }
+
+  // Single identifiers: int, float, User, Scores, etc.
+  if (annotation._type === "Name") {
+    return annotation.id;
+  }
+
+  // Qualified names: typing.List, module.CustomType, etc.
+  if (annotation._type === "Attribute") {
+    const parent = findChildrenAnnotation(annotation.value);
+    return parent ? `${parent}.${annotation.attr}` : annotation.attr;
+  }
+
+  // Generic types: List[int], dict[str, int], Optional[User], etc.
+  if (annotation._type === "Subscript") {
+    return findChildrenAnnotation(annotation.value);
+  }
+
+  return undefined;
+}
+
+function annotationArgs(
+  annotation: PythonAnnotationNode | null | undefined
+): PythonAnnotationNode[] {
+  if (!annotation) {
+    return [];
+  }
+
+  return annotation._type === "Tuple" ? (annotation.elts ?? []) : [annotation];
+}
+
+function annotationDims(
+  annotation: PythonAnnotationNode | null | undefined
+): number {
+  if (!annotation) {
+    return 0;
+  }
+
+  if (annotation._type === "Subscript") {
+    return 1 + annotationDims(annotation.slice);
+  }
+
+  if (annotation._type === "Tuple") {
+    return Math.max(0, ...(annotation.elts ?? []).map(annotationDims));
+  }
+
+  return 0;
+}
+
+function annotationChildren(
+  annotation: PythonAnnotationNode,
+  filename: string,
+  parentName: string
+): TypeRef[] {
+  if (annotation._type !== "Subscript") {
+    return [];
+  }
+
+  return annotationArgs(annotation.slice).map((child, index) => {
+    const name = `${parentName}_${index}`;
+    const typeName = findChildrenAnnotation(child);
+    const shortTypeName = typeName?.split(".").at(-1);
+    const argTag = shortTypeName
+      ? PYTHON_TYPE_MAP.get(shortTypeName)
+      : undefined;
+
+    return {
+      module: filename,
+      name,
+      optional: false,
+      dims: 0,
+      isExported: true,
+      ...(argTag && argTag !== ArgTag.UNRESOLVED
+        ? {
+            type: {
+              type: argTag,
+              dims: annotationDims(child),
+              children: annotationChildren(child, filename, name),
+              resolved: false,
+            },
+          }
+        : { typeRefName: typeName }),
+    };
+  });
+}
 
 export class PythonProgram extends AbstractProgram {
   public readonly lang = "python";
   public readonly extensions = Object.freeze([".py"]);
+  public ast_tree?: PythonModuleNode;
 
   constructor(
     getSource: () => string,
@@ -94,302 +228,285 @@ export class PythonProgram extends AbstractProgram {
     }
   }
 
-  public get ast(): PythonAst | undefined {
-    const ast = pythonAsts.get(this);
-    return ast === undefined ? undefined : structuredClone(ast);
+  protected _annotationToTypeRef(
+    annotation: PythonAnnotationNode | null | undefined,
+    name: string
+  ): TypeRef {
+    /**Function takes in a python type annotation in AST format and converts into TypeRef Format */
+    const annotationName = findChildrenAnnotation(annotation);
+    const shortAnnotationName = annotationName?.split(".").at(-1);
+    const tag = shortAnnotationName
+      ? PYTHON_TYPE_MAP.get(shortAnnotationName)
+      : undefined;
+
+    if (annotation && tag && tag !== ArgTag.UNRESOLVED) {
+      return {
+        module: this.filename,
+        name,
+        optional: false,
+        dims: 0,
+        isExported: false,
+        type: {
+          type: tag,
+          dims: annotationDims(annotation),
+          children: annotationChildren(annotation, this.filename, name),
+          resolved: false,
+        },
+      };
+    }
+
+    return {
+      module: this.filename,
+      name,
+      typeRefName: annotationName,
+      optional: false,
+      dims: 0,
+      isExported: false,
+    };
   }
 
-  public _parse(_src: string): void {
-    /* Function parses the provided source code into valid AST by
-    running Python's AST module as a subprocess */
-    const pythonScript = [
-      "import ast",
-      "import json",
-      "import sys",
-      "",
-      "def ast_to_dict(node):",
-      "    if isinstance(node, ast.AST):",
-      "        result = {",
-      '            "_type": type(node).__name__',
-      "        }",
-      "",
-      "        for field, value in ast.iter_fields(node):",
-      "            result[field] = ast_to_dict(value)",
-      "",
-      "        return result",
-      "",
-      "    elif isinstance(node, list):",
-      "        return [ast_to_dict(item) for item in node]",
-      "",
-      "    else:",
-      "        return node",
-      "",
-      "src = sys.stdin.read()",
-      "tree = ast.parse(src)",
-      "",
-      "print(json.dumps(ast_to_dict(tree)))",
-    ].join("\n");
+  protected _parse(_src: string): void {
+    /**This function parses the python source code and returns the AST tree
+     * Source code is first parsed, then fed into the pythonScript, which is then ran into terminal via
+     * TS's spawnSync and the output python AST is rendered in dictionary format and saved to
+     * object variable: `tree_ast`
+     */
+    const pythonScript = `
+import ast, sys, json
 
+def ast_to_dict(node):
+    if isinstance(node, ast.AST):
+        result = {
+            "_type": type(node).__name__,
+            **{
+                field: ast_to_dict(getattr(node, field))
+                for field in node._fields
+            }
+        }
+
+        # Include source position information if present
+        for attr in ("lineno", "col_offset", "end_lineno", "end_col_offset"):
+            if hasattr(node, attr):
+                result[attr] = getattr(node, attr)
+
+        return result
+
+    elif isinstance(node, list):
+        return [ast_to_dict(x) for x in node]
+
+    return node
+
+src = sys.stdin.read()
+
+if not src:
+    raise ValueError("Source not provided")
+
+tree = ast.parse(src)
+print(json.dumps(ast_to_dict(tree)))
+`;
+
+    //Run this script in terminal
     const result = spawnSync("python3", ["-c", pythonScript], {
       input: _src,
       encoding: "utf-8",
     });
 
+    if (result.error) {
+      throw result.error;
+    }
+
     if (result.status !== 0) {
       throw new Error(result.stderr);
     }
-    // Python parsed AST in JSON
-    pythonAsts.set(this, JSON.parse(result.stdout));
+    //store the parsed ast (dict) format into the tree_ast variable
+    this.ast_tree = JSON.parse(result.stdout);
   }
 
-  //briefly changed to public for testing purposes
-  public _findImports(): ProgramImports {
-    /**Function takes in a python parsed AST gets the necessary imports and modules that the program used */
+  protected _findImports(): ProgramImports {
+    //**This function finds all imports and extracts them from the python ast tree into the desired
+    // ProgramImports type alias format */
+
+    // if no ast_tree
+    if (!this.ast_tree) {
+      return { programs: {}, identifiers: {} };
+    }
+
     const imports: ProgramImports = {
       programs: {},
       identifiers: {},
     };
 
-    //Return empty if no imports or no ast
-    if (!this.ast || !Array.isArray(this.ast.body)) {
-      return imports;
-    }
+    //traverse through the dictionary and grab Import, ImportFrom, name used in file,
+    //original name by module, what module it came from, resolved=faksem default=false
+    for (const node of this.ast_tree?.body ?? []) {
+      //Handles the programs section of the mapping
+      if (isImportNode(node)) {
+        for (const alias of node.names) {
+          const imported = alias.name;
+          const local = alias.asname ?? imported;
 
-    //traverse through the ast
-    for (const node of this.ast.body) {
-      // normal python imports
-      if (node._type === "Import") {
-        for (const alias of node.names ?? []) {
-          const moduleName = alias.name;
-          const localName = alias.asname ?? alias.name;
-          //Populate the actual files into the object
-          imports.programs[moduleName] = moduleName;
-
-          //populated based on if the import is short handed numpy -> np
-          imports.identifiers[localName] = {
-            local: localName,
-            imported: moduleName,
-            programPath: moduleName,
-            resolved: false,
-            default: false,
-          };
+          imports.programs[local] = imported;
         }
       }
 
-      //import is being written in short hand
-      if (node._type === "ImportFrom") {
-        const moduleName = node.module;
+      //The type is directly an import and should be filled inside programs
+      if (isImportFromNode(node)) {
+        const programPath = node.module ?? "";
 
-        if (!moduleName) {
-          continue;
-        }
-        //Populate the actual files into the object
-        imports.programs[moduleName] = moduleName;
+        //Handles the identifiers section of the mapping
+        for (const alias of node.names) {
+          // imported is what is being actually imported from module
+          const imported = alias.name;
+          //local is what the user is calling it as
+          const local = alias.asname ?? imported;
 
-        //populated based on if the import is short handed numpy -> np.
-        // Iterate through each potential names from the import
-        for (const alias of node.names ?? []) {
-          const importedName = alias.name;
-          const localName = alias.asname ?? importedName;
-          imports.identifiers[localName] = {
-            local: localName,
-            imported: importedName,
-            programPath: moduleName,
+          imports.identifiers[local] = {
+            local,
+            imported,
+            programPath,
             resolved: false,
             default: false,
           };
         }
       }
     }
-
     return imports;
   }
 
-  //Temporary change to public
-  public _findTypes(): Record<IdentifierName, TypeRef> {
+  protected _findTypes(): Record<IdentifierName, TypeRef> {
+    if (!this.ast_tree) {
+      return {};
+    }
+
     const types: Record<string, TypeRef> = {};
 
-    // Check if the AST is valid
-    if (!this.ast || !Array.isArray(this.ast.body)) {
-      return types;
-    }
+    //traverse throughout the ast tree nodes
+    for (const node of this.ast_tree.body) {
+      //Assigned types, e.g. x: int = 5
+      if (
+        node._type === "AnnAssign" &&
+        node.target?._type === "Name" &&
+        node.target.id &&
+        node.annotation
+      ) {
+        const name = node.target.id;
+        const typeName = findChildrenAnnotation(node.annotation);
+        const shortTypeName = typeName?.split(".").at(-1);
+        const argTag = shortTypeName
+          ? PYTHON_TYPE_MAP.get(shortTypeName)
+          : undefined;
 
-    // User-defined classes and aliases
-    for (const node of this.ast.body) {
-      if (node._type === "ClassDef") {
-        const className = node.name;
-
-        types[className] = {
-          module: this.filename,
-          name: className,
-          optional: false,
-          dims: 0,
-          isExported: true,
-          type: {
-            type: ArgTag.OBJECT,
-            dims: 0,
-            children: [],
-            resolved: true,
-          },
-        };
-      }
-      //AST has an assign map w/ targets: ..., value:.... for a type alias in the format of
-      // Name = type
-
-      if (node._type === "Assign") {
-        const targets = node.targets;
-        const value = node.value;
-
-        //Check if valid format
-        if (
-          Array.isArray(targets) &&
-          targets.length === 1 &&
-          targets[0]._type === "Name" &&
-          value?._type === "Name"
-        ) {
-          const aliasName = targets[0].id;
-          const originalTypeName = value.id;
-
-          const tag = PYTHON_TYPE_MAP.get(originalTypeName);
-
-          if (tag) {
-            types[aliasName] = {
-              module: this.filename,
-              name: aliasName,
-              optional: false,
-              dims: 0,
-              isExported: true,
-              type: {
-                type: tag,
-                dims: 0,
-                children: [],
-                resolved: true,
-              },
-            };
-          }
-        }
-      }
-    }
-
-    return types;
-  }
-
-  private _typeRefFromAnnotation(
-    annotation: any,
-    name: string,
-    isExported = false
-  ): TypeRef {
-    // No annotation means Python did not give us a type. Return an unresolved
-    // TypeRef so the normal resolver path can mark the function unsupported.
-    if (!annotation) {
-      return {
-        module: this.filename,
-        name,
-        optional: false,
-        dims: 0,
-        isExported,
-      };
-    }
-
-    // Simple annotations like "int", "str", and "User" show up as Name nodes.
-    // Built-ins become concrete ArgTags; custom names stay as typeRefName.
-    if (annotation._type === "Name") {
-      const tag = PYTHON_TYPE_MAP.get(annotation.id);
-
-      if (tag) {
-        return {
+        types[name] = {
           module: this.filename,
           name,
           optional: false,
           dims: 0,
-          isExported,
-          type: {
-            type: tag,
-            dims: 0,
-            children: [],
-            resolved: true,
-          },
+          isExported: true,
+          ...(argTag && argTag !== ArgTag.UNRESOLVED
+            ? {
+                type: {
+                  type: argTag,
+                  dims: annotationDims(node.annotation),
+                  children: annotationChildren(
+                    node.annotation,
+                    this.filename,
+                    name
+                  ),
+                  resolved: false,
+                },
+              }
+            : { typeRefName: typeName }),
         };
       }
 
-      return {
+      //Type aliases, e.g. Scores = List[List[int]]
+      if (
+        node._type === "Assign" &&
+        node.targets?.length === 1 &&
+        node.targets[0]._type === "Name" &&
+        node.targets[0].id &&
+        node.value
+      ) {
+        const name = node.targets[0].id;
+        const typeName = findChildrenAnnotation(node.value);
+        const shortTypeName = typeName?.split(".").at(-1);
+        const argTag = shortTypeName
+          ? PYTHON_TYPE_MAP.get(shortTypeName)
+          : undefined;
+
+        types[name] = {
+          module: this.filename,
+          name,
+          optional: false,
+          dims: 0,
+          isExported: true,
+          ...(argTag && argTag !== ArgTag.UNRESOLVED
+            ? {
+                type: {
+                  type: argTag,
+                  dims: annotationDims(node.value),
+                  children: annotationChildren(node.value, this.filename, name),
+                  resolved: false,
+                },
+              }
+            : { typeRefName: typeName }),
+        };
+      }
+    }
+    return types;
+  }
+
+  //note that this output should be processed using _resolveTypeRef
+  protected _findFunctions(): typeof this._functions {
+    /**Function finds the all functions the AST tree parses and displays relevant information */
+
+    const output: typeof this._functions = { supported: {}, unsupported: {} };
+
+    if (!this.ast_tree) {
+      return output;
+    }
+
+    //traverse the ast tree
+    for (const node of this.ast_tree.body) {
+      if (node._type !== "FunctionDef" || !node.name) {
+        continue;
+      }
+
+      const args: TypeRef[] = [];
+
+      for (const param of node.args?.args ?? []) {
+        args.push(this._annotationToTypeRef(param.annotation, param.arg));
+      }
+
+      const returnType = node.returns
+        ? this._annotationToTypeRef(node.returns, "return")
+        : undefined;
+
+      output.supported[node.name] = {
         module: this.filename,
-        name,
-        typeRefName: annotation.id,
-        optional: false,
-        dims: 0,
-        isExported,
+        name: node.name,
+        src: this._getSource(),
+        startOffset: node.lineno ?? 0,
+        endOffset: node.end_lineno ?? 0,
+        isExported: !node.name.startsWith("_"),
+        isVoid: !node.returns,
+        args,
+        returnType,
       };
     }
 
-    // More complex annotations, like list[int], can be added here later.
-    // For now, leave them unresolved instead of guessing incorrectly.
-    return {
-      module: this.filename,
-      name,
-      optional: false,
-      dims: 0,
-      isExported,
-    };
-  }
-
-  public _findFunctions(): typeof this._functions {
-    /**Function returns all functions in a file and detailed information in the FunctionDef format */
-    const source = this._getSource();
-    const function_ref: typeof this._functions = {
-      supported: {},
-      unsupported: {},
-    };
-
-    const ast = this.ast;
-
-    if (!ast || !Array.isArray(ast.body)) {
-      return function_ref;
-    }
-
-    for (const node of ast.body) {
-      if (node._type === "FunctionDef") {
-        const funcName = node.name;
-        const args: TypeRef[] = [];
-
-        for (const arg of node.args?.args ?? []) {
-          if (arg.arg === "self") {
-            continue;
-          }
-
-          args.push(this._typeRefFromAnnotation(arg.annotation, arg.arg));
-        }
-
-        const returnType = node.returns
-          ? this._typeRefFromAnnotation(node.returns, "return")
-          : undefined;
-
-        function_ref.supported[funcName] = {
-          module: this.filename,
-          name: funcName,
-          src: source,
-          startOffset: node.lineno ?? 0,
-          endOffset: node.end_lineno ?? 0,
-          isExported: !funcName.startsWith("_"),
-          isVoid: node.returns === null,
-          args,
-          returnType,
-        };
-      }
-    }
-
-    return function_ref;
+    return output;
   }
 
   protected _findDefaultTypeExport(): TypeRef | undefined {
-    /**Returns undefined due to python not having export */
     return undefined;
   }
 
   public _resolveTypeRef(t: TypeRef): TypeRef {
-    /**Converts a named reference into a concrete fuzzable type from the TypeRef objects created earlier */
+    /**This function takes in the result from _findFunctions and scans the "typeRefName" key to see if it is expanded or not.
+     * if not , it searchs in _findTypes and attaches that/replaces the non expanded type
+     */
 
-    // Case 1: t already has a t.type -> check on its children
     if (t.type) {
       for (const child of t.type.children) {
         this._resolveTypeRef(child);
@@ -399,82 +516,32 @@ export class PythonProgram extends AbstractProgram {
     }
 
     if (!t.typeRefName) {
-      throw new Error(`Unable to resolve TypeRef without typeRefName`);
-    }
-    // Actual TypeRef Format lookup
-    const resolved = this._types[t.typeRefName];
-    //Make sure resolved exist
-    if (!resolved || !resolved.type) {
-      throw new Error(`Unable to resolve type ${t.typeRefName}`);
+      return t;
     }
 
-    t.type = structuredClone(resolved.type);
-    // Recurse on children
-    for (const children of t.type.children) {
-      this._resolveTypeRef(children);
+    const types = this._findTypes();
+    //the actual expanded type values
+    const resolved = types[t.typeRefName];
+
+    if (!resolved?.type) {
+      return t;
     }
-    t.type.resolved = true;
-    return t;
+
+    const resolvedType = structuredClone(resolved.type);
+    for (const child of resolvedType.children) {
+      this._resolveTypeRef(child);
+    }
+
+    return {
+      module: t.module,
+      name: t.name,
+      optional: t.optional,
+      dims: t.dims,
+      isExported: t.isExported,
+      type: {
+        ...resolvedType,
+        resolved: true,
+      },
+    };
   }
-}
-
-if (require.main === module) {
-  const source = `
-import math
-import numpy as np
-from typing import Optional, List
-from collections import defaultdict as dd
-
-CONSTANT = 10
-
-
-def add(a: int, b: float) -> float:
-    return a + b
-
-
-def _private_helper(name: str) -> str:
-    return name.strip().lower()
-
-
-def no_return(x: int):
-    print(x)
-
-
-class User:
-    def __init__(self, name: str, age: int):
-        self.name = name
-        self.age = age
-
-    def greet(self) -> str:
-        return f"Hello, {self.name}"
-
-
-class Admin(User):
-    def ban_user(self, user: User) -> bool:
-        return True
-
-
-def make_user(name: str, age: int) -> User:
-    return User(name, age)
-
-
-def process_scores(scores: list[int]) -> float:
-    return sum(scores) / len(scores)
-
-
-def maybe_get_user(flag: bool) -> Optional[User]:
-    if flag:
-        return User("Michael", 19)
-    return None
-
-`;
-
-  const program = new PythonProgram(() => source, "example.py");
-  console.log(JSON.stringify(program.ast, null, 2));
-  console.log("####\n\n");
-  //console.log(program._findImports());
-  // console.log(program._findTypes());
-  console.log("$$$$\n");
-  // console.log(program._findFunctions());
-  console.log(JSON.stringify(program._findFunctions(), null, 2));
 }
