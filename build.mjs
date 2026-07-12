@@ -25,7 +25,15 @@ await esbuild.build({
   format: "cjs",
   sourcemap: "both",
   tsconfig: "./tsconfig.json",
-  external: ["path", "fs", "crypto", "vscode", "typescript"],
+  external: [
+    "path",
+    "fs",
+    "crypto",
+    "vscode",
+    "typescript",
+    "tree-sitter",
+    "tree-sitter-python",
+  ],
 });
 
 // VSCode Web Extension Front-end UI
