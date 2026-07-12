@@ -20,8 +20,8 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 
 export class PythonProgram extends AbstractProgram {
-  public readonly lang = "python";
-  public readonly extensions = Object.freeze([".py"]);
+  public static readonly lang = "python";
+  public static readonly extensions = Object.freeze([".py"]);
   protected _ast: Parser.Tree | undefined;
 
   // Cache of `sys.path` entries (site-packages, stdlib, etc.) for the Python
@@ -1007,5 +1007,13 @@ export class PythonProgram extends AbstractProgram {
 
       return typeRef;
     }
+  }
+
+  public get lang(): ProgramFactory.ProgramLanguage {
+    return PythonProgram.lang;
+  }
+
+  public get extensions(): readonly string[] {
+    return PythonProgram.extensions;
   }
 }
