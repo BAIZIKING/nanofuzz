@@ -3,7 +3,6 @@ import { ArgOptions } from "./Types";
 import * as fs from "fs";
 import { TypescriptProgram } from "./typescript/TypescriptProgram";
 import { PythonProgram } from "./python/PythonProgram";
-import path from "path";
 
 /**
  * Returns an AbstractProgram object for the given filename.
@@ -20,14 +19,6 @@ export function fromFile(
   options?: ArgOptions,
   parent?: AbstractProgram
 ): AbstractProgram {
- if (lang === "python") {
-    if (filename !== "") {
-      filename = path.resolve(filename);
-    }
-    const getSource = () => fs.readFileSync(filename).toString();
-    return factory(filename, getSource, lang, options, parent);
-  }
-  
   if (filename !== "") {
     filename = require.resolve(filename);
   }
