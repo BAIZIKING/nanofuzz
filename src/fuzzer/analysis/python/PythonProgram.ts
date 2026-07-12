@@ -37,9 +37,9 @@ export class PythonProgram extends AbstractProgram {
     parent?: AbstractProgram
   ) {
     super(getSource, filename, options, parent);
-    if (parent && this.lang !== parent.lang) {
+    if (parent && PythonProgram.lang !== parent.lang) {
       throw new Error(
-        `A "${this.lang}" program cannot be a child of a "${parent.lang}" program.`
+        `A "${PythonProgram.lang}" program cannot be a child of a "${parent.lang}" program.`
       );
     }
   }
@@ -103,7 +103,9 @@ export class PythonProgram extends AbstractProgram {
     };
 
     for (const match of matches) {
-      const stmtNode = match.captures.find((c) => c.name === "import.stmt")?.node;
+      const stmtNode = match.captures.find(
+        (c) => c.name === "import.stmt"
+      )?.node;
       if (stmtNode === undefined) {
         continue;
       }
@@ -235,7 +237,9 @@ export class PythonProgram extends AbstractProgram {
         );
         const entries: unknown = JSON.parse(output);
         PythonProgram._sysPath = Array.isArray(entries)
-          ? entries.filter((e): e is string => typeof e === "string" && e !== "")
+          ? entries.filter(
+              (e): e is string => typeof e === "string" && e !== ""
+            )
           : [];
       } catch {
         // No interpreter on PATH, or it failed to run — external imports
@@ -307,8 +311,6 @@ export class PythonProgram extends AbstractProgram {
     return notFound;
   }
 
-
-
   /**
    * Determines whether an AST node is block scoped
    * Note: Requires that nodes have the parent property set
@@ -328,7 +330,6 @@ export class PythonProgram extends AbstractProgram {
     return false; // at root; block not encountered
   } // fn: isBlockScoped()
 
-
   protected _findTypes(): Record<IdentifierName, TypeRef> {
     const filename = this._filename;
     if (this._ast === undefined) {
@@ -337,12 +338,15 @@ export class PythonProgram extends AbstractProgram {
     const ast = this._ast;
     // List of nodes
     const types: Record<string, TypeRef> = {};
-    
-    const typeQuery = new Query(Python, `
+
+    const typeQuery = new Query(
+      Python,
+      `
 (type_alias_statement
   left: (type (identifier)) @type.name
   right: (type) @type.value) @type.def
-`);
+`
+    );
     const typeMatches = typeQuery.matches(ast.rootNode);
     for (const match of typeMatches) {
       const nameNode = match.captures.find((c) => c.name === "type.name");
@@ -350,7 +354,11 @@ export class PythonProgram extends AbstractProgram {
       if (!nameNode || !valueNode) {
         continue;
       }
-      if (!PythonProgram.isBlockScoped(match.captures.find(c => c.name === "type.def")!.node)) {
+      if (
+        !PythonProgram.isBlockScoped(
+          match.captures.find((c) => c.name === "type.def")!.node
+        )
+      ) {
         const name = nameNode.node.text;
         if (name in types) {
           throw new Error(
@@ -420,7 +428,10 @@ export class PythonProgram extends AbstractProgram {
    * @param options ArgOptions
    * @returns [type tag, dimensions, type reference name, literal value]
    */
-  protected _getTypeFromAstNode(node: Parser.SyntaxNode, options: ArgOptions): [ArgTag, number, string?, ArgType?] {
+  protected _getTypeFromAstNode(
+    node: Parser.SyntaxNode,
+    options: ArgOptions
+  ): [ArgTag, number, string?, ArgType?] {
     switch (node.type) {
       case "type":
         if (node.firstChild) {
@@ -444,8 +455,12 @@ export class PythonProgram extends AbstractProgram {
       case "none":
         return [ArgTag.LITERAL, 0, undefined, undefined];
       case "generic_type": {
-        const typeNode = node.namedChildren.find((c) => c.type === "identifier");
-        const argsNode = node.namedChildren.find((c) => c.type === "type_parameter");
+        const typeNode = node.namedChildren.find(
+          (c) => c.type === "identifier"
+        );
+        const argsNode = node.namedChildren.find(
+          (c) => c.type === "type_parameter"
+        );
         if (!typeNode || !argsNode) {
           throw new Error(`No child in generic type node`);
         }
@@ -453,10 +468,8 @@ export class PythonProgram extends AbstractProgram {
           case "list": {
             const arg = argsNode.namedChildren[0];
 
-            const [type, dims, typeName, literalValue] = this._getTypeFromAstNode(
-              arg,
-              options
-            );
+            const [type, dims, typeName, literalValue] =
+              this._getTypeFromAstNode(arg, options);
             return [type, dims + 1, typeName, literalValue];
           }
           case "tuple":
@@ -469,7 +482,7 @@ export class PythonProgram extends AbstractProgram {
               0,
               undefined,
               this._getLiteralValueFromNode(node),
-            ]; 
+            ];
           default:
             return [ArgTag.UNRESOLVED, 0, typeNode.text];
         }
@@ -481,8 +494,7 @@ export class PythonProgram extends AbstractProgram {
         return [ArgTag.UNRESOLVED, 0, node.text];
       default:
         throw new Error(
-          "Unsupported type annotation: " +
-            JSON5.stringify(node.toString())
+          "Unsupported type annotation: " + JSON5.stringify(node.toString())
         );
     }
   } // fn: _getTypeFromAstNode()
@@ -567,7 +579,7 @@ export class PythonProgram extends AbstractProgram {
       module: this._filename,
       dims: 0, // override later if needed
       optional: false, // override later if needed
-      isExported: true
+      isExported: true,
     };
 
     let typeNode = node;
@@ -578,10 +590,7 @@ export class PythonProgram extends AbstractProgram {
         // union arm (`A | B`, whose operands are bare identifiers). Only a
         // parameter list carries no type; anything else is a type reference.
         const parentType = node.parent?.type;
-        if (
-          parentType === "parameters" ||
-          parentType === "lambda_parameters"
-        ) {
+        if (parentType === "parameters" || parentType === "lambda_parameters") {
           throw new Error(`Missing type annotation: ${node.toString()}`);
         }
         break; // type-position identifier: classify below (typeNode = node)
@@ -610,13 +619,12 @@ export class PythonProgram extends AbstractProgram {
 
     // python has no ? to mark parameters as optional. Its optional type is in fact a union between the type and None, so we don't need to handle optional here. optional stays false
 
-
     // Get the node's type and dimensions
     const [type, dims, typeRefNode, literalValue] = this._getTypeFromAstNode(
       typeNode,
       this._options
     );
-    
+
     // Create the TypeRef data structure
     switch (type) {
       case ArgTag.STRING:
@@ -638,7 +646,7 @@ export class PythonProgram extends AbstractProgram {
           value: literalValue,
           resolved: true,
         };
-       break;
+        break;
       }
       case ArgTag.UNION:
       case ArgTag.TUPLE: {
@@ -661,8 +669,9 @@ export class PythonProgram extends AbstractProgram {
     return thisType;
   }
 
-
-  protected _getLambdaFromNode(captures: QueryCapture[]): FunctionRef | undefined {
+  protected _getLambdaFromNode(
+    captures: QueryCapture[]
+  ): FunctionRef | undefined {
     const nameNode = captures.find((c) => c.name === "function.name");
     const bodyNode = captures.find((c) => c.name === "function.body");
     const defNode = captures.find((c) => c.name === "function.def");
@@ -678,14 +687,20 @@ export class PythonProgram extends AbstractProgram {
       endOffset: defNode.node.endIndex,
       isExported: true,
       isVoid: false,
-      args: argsNode?.node.namedChildren.filter((arg) => arg.type === "identifier" || arg.type === "typed_parameter").map((arg) => this._getTypeRefFromAstNode(arg)),
+      args: argsNode?.node.namedChildren
+        .filter(
+          (arg) => arg.type === "identifier" || arg.type === "typed_parameter"
+        )
+        .map((arg) => this._getTypeRefFromAstNode(arg)),
       returnType: undefined,
-      cmt: undefined
-    }
+      cmt: undefined,
+    };
   }
 
   // standard functions
-  protected _getFunctionFromNode(captures: QueryCapture[]): FunctionRef | undefined {
+  protected _getFunctionFromNode(
+    captures: QueryCapture[]
+  ): FunctionRef | undefined {
     let returnType = undefined;
     let isVoid = false;
     const nameNode = captures.find((c) => c.name === "function.name");
@@ -716,10 +731,14 @@ export class PythonProgram extends AbstractProgram {
       endOffset: defNode.node.endIndex,
       isExported: true,
       isVoid,
-      args: argsNode?.node.namedChildren.filter((arg) => arg.type === "identifier" || arg.type === "typed_parameter").map((arg) => this._getTypeRefFromAstNode(arg)),
+      args: argsNode?.node.namedChildren
+        .filter(
+          (arg) => arg.type === "identifier" || arg.type === "typed_parameter"
+        )
+        .map((arg) => this._getTypeRefFromAstNode(arg)),
       returnType,
       // not sure how to get docstring yet
-    }
+    };
   }
 
   protected _findFunctions(): typeof this._functions {
@@ -731,14 +750,16 @@ export class PythonProgram extends AbstractProgram {
     const unsupported: AbstractProgram["_functions"]["unsupported"] = {};
 
     // Traverse the AST to find function definitions
-    const functionQuery = new Query(Python, 
+    const functionQuery = new Query(
+      Python,
       `
 (function_definition
   name: (identifier) @function.name
   parameters: (parameters) @function.params
   return_type: (type)? @function.return_type
   body: (block)) @function.def
-`);
+`
+    );
     const functionMatches = functionQuery.matches(this._ast.rootNode);
     for (const match of functionMatches) {
       const nameNode = match.captures.find((c) => c.name === "function.name");
@@ -764,7 +785,8 @@ export class PythonProgram extends AbstractProgram {
         };
       }
     }
-    const lambdaQuery = new Query(Python, 
+    const lambdaQuery = new Query(
+      Python,
       `
 (assignment
   left: (identifier) @function.name
@@ -772,7 +794,7 @@ export class PythonProgram extends AbstractProgram {
     parameters: (lambda_parameters)? @function.params
     body: (_)) @function.def)
 `
-    )
+    );
     const lambdaMatches = lambdaQuery.matches(this._ast.rootNode);
     for (const match of lambdaMatches) {
       const nameNode = match.captures.find((c) => c.name === "function.name");
@@ -799,12 +821,12 @@ export class PythonProgram extends AbstractProgram {
       }
     }
 
-    return {supported, unsupported}
+    return { supported, unsupported };
   }
 
   /**
    * Python has no default export
-   * 
+   *
    * @returns undefined
    */
   protected _findDefaultTypeExport(): TypeRef | undefined {
@@ -812,7 +834,6 @@ export class PythonProgram extends AbstractProgram {
   }
 
   public _resolveTypeRef(typeRef: TypeRef): TypeRef {
-    
     // Handle any resolved or partially-resolved type references
     if (typeRef.type) {
       if (typeRef.type.resolved) {
@@ -825,7 +846,7 @@ export class PythonProgram extends AbstractProgram {
         return typeRef; // Return resolved type
       }
     }
-    
+
     if (!typeRef.typeRefName) {
       throw new Error(
         `Internal error: typeRef is undefined in Typeref (${JSON5.stringify(
@@ -833,7 +854,7 @@ export class PythonProgram extends AbstractProgram {
         )})`
       );
     }
-  
+
     // Type is not yet resolved. Look up and resolve the type reference
     if (typeRef.typeRefName in this._types) {
       // Resolve and use the local type reference
@@ -841,12 +862,12 @@ export class PythonProgram extends AbstractProgram {
         this._types[typeRef.typeRefName]
       );
       typeRef.type = structuredClone(resolvedType.type);
-    
+
       if (typeRef.type) {
         typeRef.type.dims += resolvedType.dims;
       }
       typeRef.optional = typeRef.optional || resolvedType.optional;
-    
+
       return typeRef; // this._types[typeRef.typeRefName];
     } else {
       // Follow the imported type reference
@@ -857,13 +878,13 @@ export class PythonProgram extends AbstractProgram {
       let importName: string = "";
       // Lookup the import reference
       for (let index = 0; index < localNameParts.length; index++) {
-        const name = localNameParts.slice(0, index+1).join('.');
+        const name = localNameParts.slice(0, index + 1).join(".");
         if (name in this._imports.identifiers) {
           importName = name;
           break;
         }
       }
-      
+
       if (importName === "" || !(importName in this._imports.identifiers)) {
         // try looking over from-import statements in the form from foo import *
         const wildcards = Object.values(this._imports.identifiers).filter(
@@ -882,8 +903,8 @@ export class PythonProgram extends AbstractProgram {
               imported: localNameParts[0],
               programPath: wildcard.programPath,
               resolved: true,
-              default: false
-            }
+              default: false,
+            };
             importName = localNameParts[0];
             break;
           }
@@ -948,26 +969,26 @@ export class PythonProgram extends AbstractProgram {
             default: false,
           };
         }
-    
+
         // Remove the original unresolved import reference
         //delete this._imports.identifiers[importName];
-            
       }
-    
+
       // Find the imported type reference that corresponds with
       // this type reference
       //
       // TODO: Need to handle other naming patterns here
       if (typeRef.typeRefName in this._imports.identifiers) {
-        const importName = this._imports.identifiers[typeRef.typeRefName].imported;
-    
+        const importName =
+          this._imports.identifiers[typeRef.typeRefName].imported;
+
         if (importName in importProgram.typesExported) {
           // Resolve named export
           const resolvedType = importProgram._resolveTypeRef(
             importProgram.typesExported[importName]
           );
           typeRef.type = structuredClone(resolvedType.type);
-    
+
           if (typeRef.type) {
             typeRef.type.dims += resolvedType.dims;
           }
@@ -983,7 +1004,7 @@ export class PythonProgram extends AbstractProgram {
           `Internal error: ${this._filename} did not find import: ${typeRef.typeRefName}`
         );
       }
-    
+
       return typeRef;
     }
   }
