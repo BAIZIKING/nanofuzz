@@ -14,10 +14,14 @@ import * as ProgramFactory from "../ProgramFactory";
 
 import * as JSON5 from "json5";
 import Parser, { Query, QueryCapture } from "tree-sitter";
-import Python from "tree-sitter-python";
+import PythonGrammar from "tree-sitter-python";
 import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
+
+// Type definitions are broken in tree-sitter-python
+// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+const Python: Parser.Language = PythonGrammar as Parser.Language;
 
 export class PythonProgram extends AbstractProgram {
   public static readonly lang = "python";
