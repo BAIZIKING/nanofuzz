@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
       - name: Install packages
         run: yarn
       - name: Run all builds
