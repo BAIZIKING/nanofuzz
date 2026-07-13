@@ -9,6 +9,7 @@ import {
 } from "../Types";
 
 //Type ALIAS
+// These types model the JSON dictionary produced by Python's ast module.
 
 type PythonSourcePosition = {
   lineno?: number;
@@ -45,7 +46,12 @@ type PythonAnnotationNode = PythonSourcePosition & {
 };
 
 type PythonFunctionArgsNode = {
+  //support multiple types/styles of python args such as *args or **kwargs
+  posonlyargs?: PythonFunctionArgNode[];
   args?: PythonFunctionArgNode[];
+  vararg?: PythonFunctionArgNode | null;
+  kwonlyargs?: PythonFunctionArgNode[];
+  kwarg?: PythonFunctionArgNode | null;
 };
 
 type PythonFunctionArgNode = {
@@ -63,6 +69,7 @@ type PythonOtherNode = PythonSourcePosition & {
   target?: PythonAnnotationNode | null;
   targets?: PythonAnnotationNode[];
   value?: PythonAnnotationNode | null;
+  docstring?: string | null;
 };
 
 type PythonASTNode = PythonImportNode | PythonImportFromNode | PythonOtherNode;
@@ -74,6 +81,7 @@ type PythonModuleNode = {
 };
 
 //mapping of types
+// Maps Python/typing annotation names to the shared NaNofuzz ArgTag values.
 
 const PYTHON_TYPE_MAP = new Map<string, ArgTag>([
   // Primitive types
@@ -110,14 +118,18 @@ const PYTHON_TYPE_MAP = new Map<string, ArgTag>([
   ["None", ArgTag.UNRESOLVED],
 ]);
 
+//Checks whether a Python AST node is a `from x import y` node.
 function isImportFromNode(node: PythonASTNode): node is PythonImportFromNode {
   return node._type === "ImportFrom";
 }
 
+//Checks whether a Python AST node is a plain `import x` node.
 function isImportNode(node: PythonASTNode): node is PythonImportNode {
   return node._type === "Import";
 }
 
+//Finds the base annotation name from Python AST annotation nodes.
+// Examples: `int` -> int, `typing.List[int]` -> typing.List.
 function findChildrenAnnotation(
   annotation: PythonAnnotationNode | null | undefined
 ): string | undefined {
@@ -144,6 +156,8 @@ function findChildrenAnnotation(
   return undefined;
 }
 
+//Returns the inner annotation arguments for generics.
+// Example: Union[int, str] becomes [int, str].
 function annotationArgs(
   annotation: PythonAnnotationNode | null | undefined
 ): PythonAnnotationNode[] {
@@ -154,6 +168,8 @@ function annotationArgs(
   return annotation._type === "Tuple" ? (annotation.elts ?? []) : [annotation];
 }
 
+//Counts nested Subscript annotations as dimensions.
+// Example: List[List[int]] has dims 2.
 function annotationDims(
   annotation: PythonAnnotationNode | null | undefined
 ): number {
@@ -172,6 +188,8 @@ function annotationDims(
   return 0;
 }
 
+//Converts the child annotations inside a generic into TypeRef children.
+// Example: List[int] creates one number child TypeRef.
 function annotationChildren(
   annotation: PythonAnnotationNode,
   filename: string,
@@ -209,10 +227,24 @@ function annotationChildren(
   });
 }
 
+const PYTHON_AST_TREE = new WeakMap<object, PythonModuleNode>();
+
+//PythonProgram parses Python source and converts it into NaNofuzz's shared Program/Type/Function shapes.
 export class PythonProgram extends AbstractProgram {
   public readonly lang = "python";
   public readonly extensions = Object.freeze([".py"]);
-  public ast_tree?: PythonModuleNode;
+
+  public get ast_tree(): PythonModuleNode | undefined {
+    return PYTHON_AST_TREE.get(this);
+  }
+
+  public set ast_tree(astTree: PythonModuleNode | undefined) {
+    if (astTree) {
+      PYTHON_AST_TREE.set(this, astTree);
+    } else {
+      PYTHON_AST_TREE.delete(this);
+    }
+  }
 
   constructor(
     getSource: () => string,
@@ -228,6 +260,7 @@ export class PythonProgram extends AbstractProgram {
     }
   }
 
+  //Converts one Python annotation node into the shared TypeRef format.
   protected _annotationToTypeRef(
     annotation: PythonAnnotationNode | null | undefined,
     name: string
@@ -265,6 +298,7 @@ export class PythonProgram extends AbstractProgram {
     };
   }
 
+  //Parses Python source by asking Python's ast module for a JSON-shaped AST.
   protected _parse(_src: string): void {
     /**This function parses the python source code and returns the AST tree
      * Source code is first parsed, then fed into the pythonScript, which is then ran into terminal via
@@ -288,6 +322,11 @@ def ast_to_dict(node):
         for attr in ("lineno", "col_offset", "end_lineno", "end_col_offset"):
             if hasattr(node, attr):
                 result[attr] = getattr(node, attr)
+        if isinstance(
+          node,
+          (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+      ):
+          result["docstring"] = ast.get_docstring(node, clean=False)
 
         return result
 
@@ -322,6 +361,7 @@ print(json.dumps(ast_to_dict(tree)))
     this.ast_tree = JSON.parse(result.stdout);
   }
 
+  //Finds top-level Python imports and converts them into ProgramImports.
   protected _findImports(): ProgramImports {
     //**This function finds all imports and extracts them from the python ast tree into the desired
     // ProgramImports type alias format */
@@ -373,6 +413,7 @@ print(json.dumps(ast_to_dict(tree)))
     return imports;
   }
 
+  //Finds top-level annotated variables and aliases and converts them into TypeRefs.
   protected _findTypes(): Record<IdentifierName, TypeRef> {
     if (!this.ast_tree) {
       return {};
@@ -382,6 +423,23 @@ print(json.dumps(ast_to_dict(tree)))
 
     //traverse throughout the ast tree nodes
     for (const node of this.ast_tree.body) {
+      //Class definitions are treated as object types, e.g. class User: pass
+      if (node._type === "ClassDef" && node.name) {
+        types[node.name] = {
+          module: this.filename,
+          name: node.name,
+          optional: false,
+          dims: 0,
+          isExported: true,
+          type: {
+            type: ArgTag.OBJECT,
+            dims: 0,
+            children: [],
+            resolved: true,
+          },
+        };
+      }
+
       //Assigned types, e.g. x: int = 5
       if (
         node._type === "AnnAssign" &&
@@ -456,7 +514,33 @@ print(json.dumps(ast_to_dict(tree)))
     return types;
   }
 
+  private _isSupportedTypeRef(typeRef: TypeRef): boolean {
+    //**Function is helper function to be used in the _findFunctions method that determines if a function
+    // is unsupported or not */
+
+    try {
+      //Copy type ref (deep) and input into resolveTypeRef
+      const resolved = this._resolveTypeRef(structuredClone(typeRef));
+
+      if (!resolved.type) {
+        return false;
+      }
+
+      if (resolved.type.type === ArgTag.UNRESOLVED) {
+        return false;
+      }
+
+      //recurse on the children
+      return resolved.type.children.every((child) =>
+        this._isSupportedTypeRef(child)
+      );
+    } catch {
+      return false;
+    }
+  }
+
   //note that this output should be processed using _resolveTypeRef
+  //Finds top-level Python functions and converts their args/returns into FunctionRef records.
   protected _findFunctions(): typeof this._functions {
     /**Function finds the all functions the AST tree parses and displays relevant information */
 
@@ -464,6 +548,16 @@ print(json.dumps(ast_to_dict(tree)))
 
     if (!this.ast_tree) {
       return output;
+    }
+
+    const source = this._getSource();
+    const lineStarts = [0];
+    let offset = 0;
+
+    //splite the source code into individual segments in the array
+    for (const line of source.split(/\r?\n/)) {
+      offset += line.length + 1;
+      lineStarts.push(offset);
     }
 
     //traverse the ast tree
@@ -474,34 +568,87 @@ print(json.dumps(ast_to_dict(tree)))
 
       const args: TypeRef[] = [];
 
+      for (const param of node.args?.posonlyargs ?? []) {
+        args.push(this._annotationToTypeRef(param.annotation, param.arg));
+      }
+
       for (const param of node.args?.args ?? []) {
         args.push(this._annotationToTypeRef(param.annotation, param.arg));
+      }
+
+      if (node.args?.vararg) {
+        args.push(
+          this._annotationToTypeRef(
+            node.args.vararg.annotation,
+            node.args.vararg.arg
+          )
+        );
+      }
+
+      for (const param of node.args?.kwonlyargs ?? []) {
+        args.push(this._annotationToTypeRef(param.annotation, param.arg));
+      }
+
+      if (node.args?.kwarg) {
+        args.push(
+          this._annotationToTypeRef(
+            node.args.kwarg.annotation,
+            node.args.kwarg.arg
+          )
+        );
       }
 
       const returnType = node.returns
         ? this._annotationToTypeRef(node.returns, "return")
         : undefined;
 
-      output.supported[node.name] = {
+      const startOffset =
+        node.lineno && node.col_offset !== undefined
+          ? lineStarts[node.lineno - 1] + node.col_offset
+          : source.length;
+
+      const endOffset =
+        node.end_lineno && node.end_col_offset !== undefined
+          ? lineStarts[node.end_lineno - 1] + node.end_col_offset
+          : source.length;
+
+      const functionRef = {
         module: this.filename,
         name: node.name,
         src: this._getSource(),
-        startOffset: node.lineno ?? 0,
-        endOffset: node.end_lineno ?? 0,
+        startOffset: startOffset ?? 0,
+        endOffset: endOffset ?? 0,
         isExported: !node.name.startsWith("_"),
         isVoid: !node.returns,
         args,
         returnType,
+        cmt: node.docstring ?? undefined,
       };
+
+      const unsupportedArg = args.find((arg) => !this._isSupportedTypeRef(arg));
+
+      //Based on helper function if unsupported put in unsupported mapping
+      if (unsupportedArg) {
+        output.unsupported[node.name] = {
+          reason: `Unsupported argument type for '${unsupportedArg.name ?? "(unknown)"}'`,
+          argument: unsupportedArg.name,
+          function: functionRef,
+        };
+        continue;
+      }
+      //if supported
+      output.supported[node.name] = functionRef;
     }
 
     return output;
   }
 
+  //Python does not have TypeScript-style default type exports.
   protected _findDefaultTypeExport(): TypeRef | undefined {
     return undefined;
   }
 
+  //Resolves TypeRefs that point at aliases found by _findTypes().
   public _resolveTypeRef(t: TypeRef): TypeRef {
     /**This function takes in the result from _findFunctions and scans the "typeRefName" key to see if it is expanded or not.
      * if not , it searchs in _findTypes and attaches that/replaces the non expanded type
@@ -527,21 +674,11 @@ print(json.dumps(ast_to_dict(tree)))
       return t;
     }
 
-    const resolvedType = structuredClone(resolved.type);
-    for (const child of resolvedType.children) {
+    t.type = structuredClone(resolved.type);
+    for (const child of t.type.children) {
       this._resolveTypeRef(child);
     }
-
-    return {
-      module: t.module,
-      name: t.name,
-      optional: t.optional,
-      dims: t.dims,
-      isExported: t.isExported,
-      type: {
-        ...resolvedType,
-        resolved: true,
-      },
-    };
+    t.type.resolved = true;
+    return t;
   }
 }
