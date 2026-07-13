@@ -78,7 +78,7 @@ export function fromFileAndSource(
  * @param lang Language of source code
  * @param options Argument options
  * @param parent Parent AbstractProgram parent object
- * @returns an AbstractProgram represnting the profram
+ * @returns an AbstractProgram represnting the program
  */
 function factory(
   filename: string,

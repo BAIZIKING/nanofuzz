@@ -29,6 +29,14 @@ Be sure you have these tools installed:
 
 If you're using [Nix][], all dependencies other than Git will be automatically provided by the `flake.nix` file in this repo once you've cloned it.
 
+If you're using Windows, you also need to install the VC++ bits needed to build `tree-sitter`.
+More details may be found [here](https://github.com/nodejs/node-gyp#on-windows).
+You can use Cocolatey for this:
+
+```
+choco install python visualstudio2022-workload-vctools -y
+```
+
 ### Developing in Windows WSL
 
 Here are some WSL-specific guides:

@@ -53,8 +53,8 @@ const traverse: typeof _traverse =
  * - Analysis of classes and class methods are not supported
  */
 export class TypescriptProgram extends AbstractProgram {
-  public readonly lang = "typescript";
-  public readonly extensions = Object.freeze([".ts"]);
+  public static readonly lang = "typescript";
+  public static readonly extensions = Object.freeze([".ts"]);
 
   protected _ast: ParseResult<File> | undefined;
 
@@ -1060,6 +1060,14 @@ export class TypescriptProgram extends AbstractProgram {
     }
     return undefined;
   } // fn: getFunctionComment
+
+  public get lang(): ProgramFactory.ProgramLanguage {
+    return TypescriptProgram.lang;
+  }
+
+  public get extensions(): readonly string[] {
+    return TypescriptProgram.extensions;
+  }
 } // class: TypescriptProgram
 
 /**
