@@ -458,27 +458,41 @@ export class PythonProgram extends AbstractProgram {
         }
       case "none":
         return [ArgTag.LITERAL, 0, undefined, undefined];
-      case "generic_type": {
-        const typeNode = node.namedChildren.find(
-          (c) => c.type === "identifier"
-        );
-        const argsNode = node.namedChildren.find(
-          (c) => c.type === "type_parameter"
-        );
-        if (!typeNode || !argsNode) {
-          throw new Error(`No child in generic type node`);
-        }
-        switch (typeNode.text) {
-          case "list": {
-            const arg = argsNode.namedChildren[0];
+      case "generic_type":
+      case "subscript": {
+        const { base, args } = this._getGenericParts(node);
+        switch (base) {
+          case "list":
+          case "List":
+          case "Sequence":
+          case "MutableSequence":
+          case "Iterable":
+          case "Collection":
+          case "set":
+          case "Set":
+          case "frozenset":
+          case "FrozenSet": { // sets use JSON-array inputs
+            const arg = args[0];
+            if (!arg) throw new Error(`Missing element type in '${node.text}'`);
 
             const [type, dims, typeName, literalValue] =
               this._getTypeFromAstNode(arg, options);
             return [type, dims + 1, typeName, literalValue];
           }
+          case "dict":
+          case "Dict":
+          case "Mapping":
+          case "MutableMapping":
+            if (args.length !== 2) {
+              throw new Error(`Dictionary type requires key and value types: ${node.text}`);
+            }
+            return [ArgTag.DICTIONARY, 0];
           case "tuple":
+          case "Tuple":
             return [ArgTag.TUPLE, 0];
           case "Union":
+            return [ArgTag.UNION, 0];
+          case "Optional":
             return [ArgTag.UNION, 0];
           case "Literal":
             return [
@@ -488,7 +502,7 @@ export class PythonProgram extends AbstractProgram {
               this._getLiteralValueFromNode(node),
             ];
           default:
-            return [ArgTag.UNRESOLVED, 0, typeNode.text];
+            return [ArgTag.UNRESOLVED, 0, base];
         }
       }
       case "union_type":
@@ -503,6 +517,33 @@ export class PythonProgram extends AbstractProgram {
         );
     }
   } // fn: _getTypeFromAstNode()
+
+  /**
+   * Extracts the base name and arguments from built-in (`dict[str, int]`) and
+   * qualified `typing` (`typing.Dict[str, int]`) generics. Tree-sitter uses
+   * different node shapes for those spellings, so keeping the normalization
+   * here ensures the container cases below behave identically.
+   */
+  private _getGenericParts(node: Parser.SyntaxNode): {
+    base: string;
+    args: Parser.SyntaxNode[];
+  } {
+    if (node.type === "generic_type") {
+      const base = node.namedChildren.find(
+        (child) => child.type === "identifier"
+      );
+      const parameters = node.namedChildren.find(
+        (child) => child.type === "type_parameter"
+      );
+      if (!base || !parameters) throw new Error(`Malformed generic type: ${node.text}`);
+      return { base: base.text, args: parameters.namedChildren };
+    }
+
+    const base = node.childForFieldName("value");
+    const args = node.childrenForFieldName("subscript");
+    if (!base || !args.length) throw new Error(`Malformed subscript type: ${node.text}`);
+    return { base: base.text.split(".").at(-1) ?? base.text, args };
+  }
 
   /**
    * Returns the child TypeRef objects for a composite type node (union/tuple).
@@ -546,24 +587,46 @@ export class PythonProgram extends AbstractProgram {
           )
           .map((arm) => this._getTypeRefFromAstNode(arm));
 
-      case "generic_type": {
-        const base = node.namedChildren.find((c) => c.type === "identifier");
-        const args = node.namedChildren.find(
-          (c) => c.type === "type_parameter"
-        );
-        if (!base || !args) {
-          throw new Error(`Malformed generic_type in _getChildrenFromNode`);
-        }
-        switch (base.text) {
+      case "generic_type":
+      case "subscript": {
+        const { base, args } = this._getGenericParts(node);
+        switch (base) {
           // Array-likes: peel to the element and recurse (mirror TSArrayType),
           // so `list[A | B]` yields the union's children with dims on the
           // parent.
           case "list":
-            return this._getChildrenFromNode(args.namedChildren[0]);
+          case "List":
+          case "Sequence":
+          case "MutableSequence":
+          case "Iterable":
+          case "Collection":
+          case "set":
+          case "Set":
+          case "frozenset":
+          case "FrozenSet":
+            // Sets are modeled as arrays because fuzzer inputs are JSON.
+            // The Python runner can reconstruct a set at its boundary later.
+            return this._getChildrenFromNode(args[0]);
           // Composites: each argument (`type` node) is a child.
           case "Union":
           case "tuple":
-            return args.namedChildren.map((c) =>
+          case "Tuple":
+          case "dict":
+          case "Dict":
+          case "Mapping":
+          case "MutableMapping":
+            return args.map((c, index) => {
+              const child = this._getTypeRefFromAstNode(c);
+              // A dictionary has no fixed property names. Preserve its two
+              // type parameters explicitly so generators and validators can
+              // apply the key and value constraints to every entry.
+              if (base === "dict" || base === "Dict" || base === "Mapping" || base === "MutableMapping") {
+                child.name = index === 0 ? "key" : "value";
+              }
+              return child;
+            });
+          case "Optional":
+            return args.map((c) =>
               this._getTypeRefFromAstNode(c)
             );
           // Literal / references / unknown generics have no children here.
@@ -660,7 +723,8 @@ export class PythonProgram extends AbstractProgram {
         break;
       }
       case ArgTag.UNION:
-      case ArgTag.TUPLE: {
+      case ArgTag.TUPLE:
+      case ArgTag.DICTIONARY: {
         thisType.type = {
           dims: dims,
           type: type,
@@ -673,9 +737,8 @@ export class PythonProgram extends AbstractProgram {
         thisType.typeRefName = typeRefNode; // Unresolved type reference
         break;
       }
-      case ArgTag.OBJECT: {
-        throw new Error(`No objects in Python`);
-      }
+      case ArgTag.OBJECT:
+        throw new Error(`Unexpected object type in Python annotation`);
     }
     return thisType;
   }
