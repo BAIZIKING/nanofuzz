@@ -5,6 +5,7 @@ import { ArgDef } from "./analysis/ArgDef";
 import { ArgValueType, FunctionRef } from "./analysis/Types";
 import { CompositeInputGenerator } from "./generators/CompositeInputGenerator";
 import * as compiler from "./compilers/TypescriptCompiler";
+import * as CompilerFactory from "./compilers/CompilerFactory";
 import * as ProgramFactory from "./analysis/ProgramFactory";
 import { FunctionDef } from "./analysis/FunctionDef";
 import {
@@ -21,13 +22,15 @@ import { MeasureFactory } from "./measures/MeasureFactory";
 import { RunnerFactory } from "./runners/RunnerFactory";
 import { Leaderboard } from "./generators/Leaderboard";
 import { InputGeneratorStatsAi, ScoredInput } from "./generators/Types";
-import { isError, getErrorMessageOrJson } from "../fuzzer/Util";
+import { isError } from "../fuzzer/Util";
 import { CodeCoverageMeasureStats } from "./measures/CoverageMeasure";
 import { CompositeOracle } from "./oracles/CompositeOracle";
 import { ImplicitOracle } from "./oracles/ImplicitOracle";
 import { ExampleOracle } from "./oracles/ExampleOracle";
 import { PropertyOracle } from "./oracles/PropertyOracle";
 import { AbstractProgram } from "./analysis/AbstractProgram";
+import { TypescriptProgram } from "./analysis/typescript/TypescriptProgram";
+import { RunnerResult } from "./runners/AbstractRunner";
 
 export class Tester {
   protected _module: string; // module filename
@@ -115,7 +118,7 @@ export class Tester {
     );
 
     // Start a background compilation
-    if (mode.precompile) {
+    if (mode.precompile && CompilerFactory.needsCompilation(module)) {
       compiler.TypescriptCompiler.compileAsync(module);
     }
   }
@@ -292,21 +295,21 @@ export class Tester {
   } // property: get state
 
   /**
-   * Runs the tester in sync mode and returns its results.
+   * Runs the tester and returns its results.
    *
    * @param `injectTests` tests to inject
    * @param `mode` testing mode
    * @returns `FuzzTestResults`
    */
-  public testSync(
+  public async testSync(
     injectTests: FuzzPinnedTest[] = [],
     mode: FuzzMode = { gen: true }
-  ): FuzzTestResults {
+  ): Promise<FuzzTestResults> {
     let result: FuzzTestResults | undefined;
     try {
       const run = this._run(injectTests, mode);
       while (!result) {
-        result = run.next().value;
+        result = (await run.next()).value;
       }
       return result;
     } catch (e: unknown) {
@@ -346,16 +349,16 @@ export class Tester {
    * @param `callbackFn` called when testing completes
    * @param `run` generator function
    */
-  protected _runBatchAsync(
+  protected async _runBatchAsync(
     callbackFn: (result: FuzzTestResults | Error) => void,
     run: ReturnType<typeof this._run>
-  ): void {
+  ): Promise<void> {
     let result: FuzzTestResults | undefined;
     const timer = performance.now();
 
     while (!result && performance.now() - timer < 100) {
       try {
-        result = run.next().value;
+        result = (await run.next()).value;
         if (result) {
           callbackFn(result);
           return;
@@ -387,12 +390,12 @@ export class Tester {
    * @param `cancelFn` called to check cancel status
    * @returns test results
    */
-  protected *_run(
+  protected async *_run(
     injectTests: FuzzPinnedTest[] = [],
     mode: FuzzMode = { gen: true },
     updateFn?: (payload: FuzzBusyStatusMessage) => void,
     cancelFn?: () => boolean
-  ): Generator<
+  ): AsyncGenerator<
     FuzzTestResults | undefined,
     FuzzTestResults,
     FuzzTestResults | undefined
@@ -470,19 +473,25 @@ export class Tester {
     // it to JavaScript (and possibly instrument it) prior to execution.
     const fqSrcFile = fs.realpathSync(this._function.getModule()); // Help the module loader
     const startCompTime = performance.now(); // start time: compile & instrument
-    this._lastCompiler = new compiler.TypescriptCompiler(fqSrcFile);
-    const mod = this._lastCompiler.compileSync(this._measures, update);
+    const isNativeTs = TypescriptProgram.understands({ filename: fqSrcFile });
+    if (isNativeTs) {
+      this._lastCompiler = new compiler.TypescriptCompiler(fqSrcFile);
+    }
+    const mod = this._lastCompiler
+      ? this._lastCompiler.compileSync(this._measures, update) // native ts
+      : fqSrcFile; // something other than native ts
     this._results.stats.timers.compile = performance.now() - startCompTime;
 
     // Build a test runner for executing tests
     const runner = RunnerFactory(this.env, mod, this._function.getName());
+    await runner.onRunStart();
 
     // Build runners for the property validators
-    const propertyOracle = new PropertyOracle(
-      this._validators.map((vFnRef) =>
-        RunnerFactory(this.env, mod, vFnRef.name)
-      )
+    const propRunners = this._validators.map((vFnRef) =>
+      RunnerFactory(this.env, mod, vFnRef.name)
     );
+    //propRunners.forEach(async (p) => await p.onRunStart());
+    const propertyOracle = new PropertyOracle(propRunners);
 
     // Are we currently injecting inputs?
     let stillInjecting = !!injectTests.length;
@@ -538,6 +547,10 @@ export class Tester {
           e.onRunEnd(this._results);
         });
         this._compositeInputGenerator.onRunEnd(); // also handles shutdown for subgens
+
+        // Shut down runners
+        await runner.onRunEnd();
+        await propRunners.forEach(async (p) => p.onRunEnd());
 
         console.log(
           ` - Executed ${
@@ -726,33 +739,59 @@ export class Tester {
         pct: typeof stopCondition === "number" ? stopCondition : 100,
       });
 
-      // Call the function via the runner
+      // Call the PUT via its runner
       const startRunTime = performance.now(); // start timer
+      let exeOutput: RunnerResult;
       try {
-        const inputValues = result.input.map((e) => e.value);
-        const [exeOutput] = runner.run(
-          JSON5.parse<typeof inputValues>(JSON5.stringify(inputValues)),
+        exeOutput = await runner.run(
+          structuredClone(result.input.map((e) => e.value)),
           this._options.fnTimeout
-        ); // <-- Runner (protect the input)
-        result.output.push({
-          name: "0",
-          offset: 0,
-          value: exeOutput as ArgValueType,
-          origin: { type: "put" },
-        });
-        result.timers.run = performance.now() - startRunTime; // stop timer
+        );
       } catch (e: unknown) {
-        result.timers.run = performance.now() - startRunTime; // stop timer
-        const msg = getErrorMessageOrJson(e);
-        const stack = isError(e) ? e.stack : "<no stack>";
-        if (isTimeoutError(e)) {
-          result.timeout = true;
+        if (isError(e)) {
+          exeOutput = {
+            result: {
+              tag: "error",
+              name: e.name,
+              message: e.message,
+              stack: e.stack ?? "<no stack>",
+              seq: -1,
+            },
+            env: {},
+          };
         } else {
-          result.exception = true;
-          result.exceptionMessage = msg;
-          result.stack = stack;
+          exeOutput = {
+            result: {
+              tag: "error",
+              name: "unknown internal runner error",
+              message: "unknown",
+              stack: "<no stack>",
+              seq: -1,
+            },
+            env: {},
+          };
         }
       }
+      result.timers.run = performance.now() - startRunTime; // stop timer
+      switch (exeOutput.result.tag) {
+        case "value":
+          result.output.push({
+            name: "0",
+            offset: 0,
+            value: exeOutput.result.value as ArgValueType,
+            origin: { type: "put" },
+          });
+          break;
+        case "error":
+          result.exception = true;
+          result.exceptionMessage = exeOutput.result.message;
+          result.stack = exeOutput.result.stack;
+          break;
+        case "timeout":
+          result.timeout = true;
+          break;
+      }
+
       this._results.stats.timers.put += result.timers.run;
       if (genStats) {
         genStats.timers.run += result.timers.run;
@@ -783,8 +822,8 @@ export class Tester {
       // PROPERTY ORACLE --------------------------------------------
       // If a property validator is selected, call it to evaluate the result
       if (this._options.useProperty) {
-        propertyOracle
-          .judge(
+        (
+          await propertyOracle.judge(
             Object.freeze({
               in: result.input.map((i) => i.value), // inputs
               out:
@@ -795,17 +834,17 @@ export class Tester {
               timeout: result.timeout,
             })
           )
-          .forEach((j, i) => {
-            if (isError(j)) {
-              result.passedValidators.push("unknown");
-              result.validatorException = true;
-              result.validatorExceptionMessage = j.message;
-              result.validatorExceptionFunction = this._validators[i].name;
-              result.validatorExceptionStack = j.stack;
-            } else {
-              result.passedValidators.push(j);
-            }
-          });
+        ).forEach((j, i) => {
+          if (isError(j)) {
+            result.passedValidators.push("unknown");
+            result.validatorException = true;
+            result.validatorExceptionMessage = j.message;
+            result.validatorExceptionFunction = this._validators[i].name;
+            result.validatorExceptionStack = j.stack;
+          } else {
+            result.passedValidators.push(j);
+          }
+        });
 
         // Summarize propert judgments.
         result.passedValidator = PropertyOracle.summarize(
@@ -988,10 +1027,13 @@ const isOptionValid = (options: FuzzOptions): boolean => {
  * @param param1
  * @returns
  */
-export function functionTimeout(function_: any, timeout: number): any {
+export function functionTimeout(
+  function_: (...inputs: unknown[]) => unknown,
+  timeout: number
+): (...inputs: unknown[]) => unknown {
   const script = new vm.Script("returnValue = function_()");
 
-  const wrappedFunction = (...arguments_: ArgValueType[]) => {
+  const wrappedFunction = (...arguments_: unknown[]) => {
     const context = {
       returnValue: undefined,
       function_: () => function_(...arguments_),
@@ -1009,22 +1051,6 @@ export function functionTimeout(function_: any, timeout: number): any {
 
   return wrappedFunction;
 } // fn: functionTimeout()
-
-/**
- * Adapted from: https://github.com/sindresorhus/function-timeout/blob/main/index.js
- *
- * Returns true if the exception is a timeout.
- *
- * @param error exception
- * @returns true if the exeception is a timeout exception, false otherwise
- */
-export function isTimeoutError(error: unknown): boolean {
-  return (
-    isError(error) &&
-    "code" in error &&
-    error.code === "ERR_SCRIPT_EXECUTION_TIMEOUT"
-  );
-} // fn: isTimeoutError()
 
 /**
  * Returns a list of validator FunctionRefs found within the ProgramDef
