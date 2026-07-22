@@ -321,7 +321,6 @@ export class ArgDefMutator {
             }
             break;
           }
-
           case ArgTag.LITERAL: {
             // Nothing to do here: literals cannot be mutated
             break;

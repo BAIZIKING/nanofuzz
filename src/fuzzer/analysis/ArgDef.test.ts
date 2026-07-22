@@ -693,7 +693,6 @@ function getRandomArgDef(
     case ArgTag.OBJECT: {
       break;
     }
-
     case ArgTag.LITERAL: {
       if (prng() < 0.1) {
         interval = undefined;

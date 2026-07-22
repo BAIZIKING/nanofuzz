@@ -181,10 +181,7 @@ function generateRandomInputFn<T extends ArgType>(
   // Callback fn to generate value
   const randFnWrapper: PublicRandFn = () => {
     if (arg.isNoInput()) return undefined;
-    if (
-      type === ArgTag.OBJECT ||
-      type === ArgTag.TUPLE
-    ) {
+    if (type === ArgTag.OBJECT || type === ArgTag.TUPLE) {
       return randFn(prng, {}, {}, options);
     }
     if (type === ArgTag.UNION) {

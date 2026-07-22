@@ -114,7 +114,7 @@ To run the local version of the NaNofuzz extension:
 ## Contributing
 
 NaNofuzz is an open science project that aims to help software engineers write
- better tests that find more bugs in less time during active development. Community
+better tests that find more bugs in less time during active development. Community
 contributions that align with these aims are important to our project,
 and we encourage folks to collaborate with us to make NaNofuzz better!
 

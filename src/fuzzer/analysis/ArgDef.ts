@@ -71,9 +71,7 @@ export class ArgDef<T extends ArgType> {
     this.dims = dims ?? 0;
     this.optional = optional ?? false;
     this.children =
-      type === ArgTag.OBJECT ||
-      type === ArgTag.UNION ||
-      type === ArgTag.TUPLE
+      type === ArgTag.OBJECT || type === ArgTag.UNION || type === ArgTag.TUPLE
         ? (children ?? [])
         : [];
     this.typeRef = typeRef;

@@ -359,7 +359,6 @@ export class AiInputGenerator extends AbstractInputGenerator {
           });
           return zod.strictObject(obj);
         }
-
         case ArgTag.TUPLE: {
           const tupleItems = argChildren.map((child, i) => {
             const zodChild = this._argDefToSchema(
