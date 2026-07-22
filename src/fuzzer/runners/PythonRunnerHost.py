@@ -10,6 +10,7 @@ from typing import Any, Literal, List, Union, TypedDict, NotRequired
 
 try:
     import json5
+    import coverage
 except ModuleNotFoundError as e:
     print(f"ERROR {e}")
     exit(3)
@@ -24,6 +25,7 @@ class RunnerValueResult(TypedDict):
     tag: Literal["value"]
     value: Any
     seq: int
+    coverageData: NotRequired[List[int]]
 
 
 class RunnerErrorResult(TypedDict):
@@ -33,6 +35,7 @@ class RunnerErrorResult(TypedDict):
     stack: NotRequired[str]
     source: Literal["put", "host"]
     seq: int
+    coverageData: NotRequired[List[int]]
 
 
 type RunnerResult = Union[RunnerValueResult, RunnerErrorResult]
@@ -87,20 +90,63 @@ def get_inputs() -> RunnerInput:
         return input
 
 
-def run_put(input: RunnerInput) -> RunnerResult:
+def coverage_lines(cov: coverage.Coverage, filename: str) -> List[int]:
+    """
+    Returns the sorted line numbers executed since the last `cov.erase()`.
+
+    Note: `CoverageData.lines()` returns None (not an error) when `filename`
+    does not exactly match the key coverage.py recorded, so fall back to
+    matching against the measured files.
+    """
+    data = cov.get_data()
+    lines = data.lines(filename)
+    if lines is None:
+        target = os.path.normcase(os.path.realpath(filename))
+        for measured in data.measured_files():
+            if os.path.normcase(os.path.realpath(measured)) == target:
+                lines = data.lines(measured)
+                break
+    return sorted(lines or [])
+
+
+def run_put(input: RunnerInput, filename: str, cov: coverage.Coverage) -> RunnerResult:
     logging.debug(f"Running function '{fnname}' for {input}")
+
+    # Measure only the call itself: module-level code already ran at load
+    cov.erase()
+    cov.start()
+    error = None
+    value = None
     try:
         with redirect_stdout(io.StringIO()) as f:
-            return RunnerValueResult(tag="value", value=fn(*input["args"]), seq=input["seq"])
+            value = fn(*input["args"])
     except Exception as e:
+        error = e
+    finally:
+        cov.stop()
+
+    # Read coverage after stopping: a failing input still covers lines, and
+    # those inputs are often the interesting ones.
+    coverageData = coverage_lines(cov, filename)
+
+    if error is not None:
         return RunnerErrorResult(
             tag="error",
             name="PythonPutError",
-            message=str(e),
+            message=str(error),
             source="put",
-            stack=traceback.format_exc(),
-            seq=input["seq"]
+            stack="".join(traceback.format_exception(
+                type(error), error, error.__traceback__)),
+            seq=input["seq"],
+            coverageData=coverageData
         )
+
+    return RunnerValueResult(
+        tag="value",
+        value=value,
+        seq=input["seq"],
+        coverageData=coverageData
+    )
 
 
 def put_result(result: RunnerResult) -> None:
@@ -132,6 +178,20 @@ if __name__ == "__main__":
     modulename = sys.argv[2]
     fnname = sys.argv[3]
 
+    # Normalize the path: coverage.py keys its data by the resolved filename,
+    # and `include` patterns must match it.
+    filename = os.path.realpath(filename)
+
+    # One in-memory coverage instance for the whole run. `data_file=None`
+    # keeps coverage.py from writing a .coverage file into the user's project
+    # on every test.
+    cov = coverage.Coverage(include=[filename], branch=False, data_file=None)
+
+    # Static analysis of the PUT: the set of executable lines. This is the
+    # denominator for coverage and is stable for the whole run, so send it
+    # once rather than with every result.
+    _, statements, _excluded, _missing, _ = cov.analysis2(filename)
+
     # Try to load the function: either results in a RunnerErrorResult
     # or a callable function
     logging.debug(f"Loading function '{fnname}' in {filename}")
@@ -150,11 +210,23 @@ if __name__ == "__main__":
     sys.stdout.buffer.flush()
     logging.debug(f"Sent READY message (length {len(msg)})")
 
+    # Send the static coverage info once, as a length-prefixed message so it
+    # uses the same framing as every other message on this pipe.
+    msg = json5.dumps({
+        "tag": "coverageInfo",
+        "file": filename,
+        "executable": sorted(statements),
+    }).encode('utf-8')
+    sys.stdout.buffer.write(struct.pack('>I', len(msg)))  # payload size
+    sys.stdout.buffer.write(msg)  # payload
+    sys.stdout.buffer.flush()
+    logging.debug(f"Sent coverageInfo ({len(statements)} executable lines)")
+
     # Start the run loop
     while True:
         logging.debug("Top of main loop")
         if (loadError == None):
-            put_result(run_put(get_inputs()))  # Call the put
+            put_result(run_put(get_inputs(), filename, cov))  # Call the put
         else:
             get_inputs()
             put_result(loadError)  # Return the load error
