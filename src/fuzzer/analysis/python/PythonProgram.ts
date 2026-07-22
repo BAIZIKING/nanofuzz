@@ -372,6 +372,71 @@ export class PythonProgram extends AbstractProgram {
         types[name] = this._getTypeRefFromAstNode(valueNode.node);
       }
     }
+
+    // TypedDict has fixed, named fields, so it is represented by the
+    // existing object type rather than a dynamic mapping type. Resolve the
+    // standard spelling, qualified spellings, and an imported alias; do not
+    // treat ordinary `dict[...]` annotations as objects.
+    const isTypedDictBase = (node: Parser.SyntaxNode): boolean => {
+      if (
+        [
+          "TypedDict",
+          "typing.TypedDict",
+          "typing_extensions.TypedDict",
+        ].includes(node.text)
+      ) {
+        return true;
+      }
+      return this._imports.identifiers[node.text]?.imported === "TypedDict";
+    };
+    for (const classNode of ast.rootNode.namedChildren.filter(
+      (node) => node.type === "class_definition"
+    )) {
+      const superclasses = classNode.childForFieldName("superclasses");
+      const inheritedFields =
+        superclasses?.namedChildren.flatMap((node) => {
+          const base = types[node.text];
+          return base?.type?.type === ArgTag.OBJECT
+            ? base.type.children
+            : [];
+        }) ?? [];
+      const isTypedDict =
+        superclasses?.namedChildren.some(isTypedDictBase) ||
+        inheritedFields.length > 0;
+      if (!isTypedDict) continue;
+
+      const nameNode = classNode.childForFieldName("name");
+      const bodyNode = classNode.childForFieldName("body");
+      if (!nameNode || !bodyNode) continue;
+      if (nameNode.text in types) {
+        throw new Error(
+          `Duplicate type alias '${nameNode.text}' found in module '${filename}'`
+        );
+      }
+
+      const children: TypeRef[] = [...inheritedFields];
+      for (const statement of bodyNode.namedChildren) {
+        const assignment = statement.namedChildren.find(
+          (node) => node.type === "assignment"
+        );
+        const fieldName = assignment?.childForFieldName("left");
+        const fieldType = assignment?.childForFieldName("type");
+        if (!assignment || !fieldName || !fieldType || fieldName.type !== "identifier") {
+          continue;
+        }
+        const field = this._getTypeRefFromAstNode(fieldType);
+        field.name = fieldName.text;
+        children.push(field);
+      }
+
+      types[nameNode.text] = {
+        module: this._filename,
+        dims: 0,
+        optional: false,
+        isExported: true,
+        type: { type: ArgTag.OBJECT, dims: 0, children },
+      };
+    }
     return types;
   }
 
@@ -471,7 +536,8 @@ export class PythonProgram extends AbstractProgram {
           case "set":
           case "Set":
           case "frozenset":
-          case "FrozenSet": { // sets use JSON-array inputs
+          case "FrozenSet": {
+            // sets use JSON-array inputs
             const arg = args[0];
             if (!arg) throw new Error(`Missing element type in '${node.text}'`);
 
@@ -479,14 +545,7 @@ export class PythonProgram extends AbstractProgram {
               this._getTypeFromAstNode(arg, options);
             return [type, dims + 1, typeName, literalValue];
           }
-          case "dict":
-          case "Dict":
-          case "Mapping":
-          case "MutableMapping":
-            if (args.length !== 2) {
-              throw new Error(`Dictionary type requires key and value types: ${node.text}`);
-            }
-            return [ArgTag.DICTIONARY, 0];
+
           case "tuple":
           case "Tuple":
             return [ArgTag.TUPLE, 0];
@@ -519,10 +578,10 @@ export class PythonProgram extends AbstractProgram {
   } // fn: _getTypeFromAstNode()
 
   /**
-   * Extracts the base name and arguments from built-in (`dict[str, int]`) and
-   * qualified `typing` (`typing.Dict[str, int]`) generics. Tree-sitter uses
-   * different node shapes for those spellings, so keeping the normalization
-   * here ensures the container cases below behave identically.
+   * Extracts the base name and arguments from built-in and qualified generic
+   * annotations. Tree-sitter uses different node shapes for those spellings,
+   * so keeping the normalization here ensures container cases behave
+   * identically.
    */
   private _getGenericParts(node: Parser.SyntaxNode): {
     base: string;
@@ -535,13 +594,15 @@ export class PythonProgram extends AbstractProgram {
       const parameters = node.namedChildren.find(
         (child) => child.type === "type_parameter"
       );
-      if (!base || !parameters) throw new Error(`Malformed generic type: ${node.text}`);
+      if (!base || !parameters)
+        throw new Error(`Malformed generic type: ${node.text}`);
       return { base: base.text, args: parameters.namedChildren };
     }
 
     const base = node.childForFieldName("value");
     const args = node.childrenForFieldName("subscript");
-    if (!base || !args.length) throw new Error(`Malformed subscript type: ${node.text}`);
+    if (!base || !args.length)
+      throw new Error(`Malformed subscript type: ${node.text}`);
     return { base: base.text.split(".").at(-1) ?? base.text, args };
   }
 
@@ -611,24 +672,8 @@ export class PythonProgram extends AbstractProgram {
           case "Union":
           case "tuple":
           case "Tuple":
-          case "dict":
-          case "Dict":
-          case "Mapping":
-          case "MutableMapping":
-            return args.map((c, index) => {
-              const child = this._getTypeRefFromAstNode(c);
-              // A dictionary has no fixed property names. Preserve its two
-              // type parameters explicitly so generators and validators can
-              // apply the key and value constraints to every entry.
-              if (base === "dict" || base === "Dict" || base === "Mapping" || base === "MutableMapping") {
-                child.name = index === 0 ? "key" : "value";
-              }
-              return child;
-            });
           case "Optional":
-            return args.map((c) =>
-              this._getTypeRefFromAstNode(c)
-            );
+            return args.map((c) => this._getTypeRefFromAstNode(c));
           // Literal / references / unknown generics have no children here.
           default:
             return [];
@@ -723,8 +768,7 @@ export class PythonProgram extends AbstractProgram {
         break;
       }
       case ArgTag.UNION:
-      case ArgTag.TUPLE:
-      case ArgTag.DICTIONARY: {
+      case ArgTag.TUPLE: {
         thisType.type = {
           dims: dims,
           type: type,

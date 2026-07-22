@@ -72,7 +72,6 @@ export class ArgDef<T extends ArgType> {
     this.optional = optional ?? false;
     this.children =
       type === ArgTag.OBJECT ||
-      type === ArgTag.DICTIONARY ||
       type === ArgTag.UNION ||
       type === ArgTag.TUPLE
         ? (children ?? [])
@@ -201,7 +200,6 @@ export class ArgDef<T extends ArgType> {
       case ArgTag.BOOLEAN:
         return [{ min: false, max: true }];
       case ArgTag.OBJECT:
-      case ArgTag.DICTIONARY:
       case ArgTag.LITERAL:
       case ArgTag.UNION:
       case ArgTag.TUPLE:
@@ -499,13 +497,6 @@ export class ArgDef<T extends ArgType> {
             }: ${child.getTypeAnnotation(options)}`
         );
         return `{ ${childTypeAnnotations.join("; ")} }`;
-      }
-
-      case ArgTag.DICTIONARY: {
-        const [key, value] = this.children;
-        return `Record<${key?.getTypeAnnotation(options) ?? "string"}, ${
-          value?.getTypeAnnotation(options) ?? "unknown"
-        }>`;
       }
 
       case ArgTag.UNION: {

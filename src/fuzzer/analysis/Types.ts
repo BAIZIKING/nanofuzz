@@ -70,8 +70,6 @@ export enum ArgTag {
   STRING = "string",
   BOOLEAN = "boolean",
   OBJECT = "object",
-  /** A Python/JSON mapping whose children are `[keyType, valueType]`. */
-  DICTIONARY = "dictionary",
   LITERAL = "literal",
   UNION = "union",
   TUPLE = "tuple",

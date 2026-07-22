@@ -359,16 +359,7 @@ export class AiInputGenerator extends AbstractInputGenerator {
           });
           return zod.strictObject(obj);
         }
-        case ArgTag.DICTIONARY: {
-          const [key, value] = argChildren;
-          if (!key || !value) {
-            throw new Error("Dictionary arguments require key and value types");
-          }
-          return zod.record(
-            this._argDefToSchema(key, `${path}.key`, directives),
-            this._argDefToSchema(value, `${path}.value`, directives)
-          );
-        }
+
         case ArgTag.TUPLE: {
           const tupleItems = argChildren.map((child, i) => {
             const zodChild = this._argDefToSchema(

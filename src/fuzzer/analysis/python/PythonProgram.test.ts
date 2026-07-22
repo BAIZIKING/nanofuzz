@@ -137,43 +137,98 @@ type MixedColumn = list[int | str]`,
     ).toEqual([ArgTag.NUMBER, ArgTag.STRING]);
   });
 
-  it("extracts built-in and typing dictionary/container annotations", () => {
-    // Covers PEP 585 built-ins, `typing`-qualified generics, and composition
-    // with a union-like wrapper. These are parser-level tests, so no typing
-    // package import is needed at runtime.
+  it("extracts TypedDict annotations as fixed objects", () => {
     const types = ProgramFactory.fromSource(
-      () => `type Scores = dict[str, list[int]]
-type Lookup = typing.Dict[str, float]
-type Labels = set[str]
-type TaggedScores = dict[str, int | str]
-type MaybeScores = Optional[dict[str, int]]`,
+      () => `class Player(TypedDict):
+    name: str
+    rating: int
+    tags: list[str]`,
       "python"
     ).types;
 
-    expect(types["Scores"].type?.type).toEqual(ArgTag.DICTIONARY);
-    expect(types["Scores"].type?.children.map((child) => child.name)).toEqual([
-      "key",
-      "value",
+    expect(types["Player"].type?.type).toEqual(ArgTag.OBJECT);
+    expect(types["Player"].type?.children.map((child) => child.name)).toEqual([
+      "name",
+      "rating",
+      "tags",
     ]);
-    expect(types["Scores"].type?.children[1].type).toEqual(
-      jasmine.objectContaining({ type: ArgTag.NUMBER, dims: 1 })
+    expect(types["Player"].type?.children[0].type?.type).toEqual(
+      ArgTag.STRING
     );
-    expect(types["Lookup"].type?.type).toEqual(ArgTag.DICTIONARY);
-    expect(types["Labels"].type).toEqual(
+    expect(types["Player"].type?.children[1].type?.type).toEqual(
+      ArgTag.NUMBER
+    );
+    expect(types["Player"].type?.children[2].type).toEqual(
       jasmine.objectContaining({ type: ArgTag.STRING, dims: 1 })
     );
-    expect(types["TaggedScores"].type?.children[1].type).toEqual(
-      jasmine.objectContaining({ type: ArgTag.UNION })
+  });
+
+  it("recognizes qualified TypedDict bases and composite field annotations", () => {
+    const types = ProgramFactory.fromSource(
+      () => `class Settings(typing.TypedDict):
+    retries: int | None
+    labels: tuple[str, bool]`,
+      "python"
+    ).types;
+
+    expect(types["Settings"].type?.type).toEqual(ArgTag.OBJECT);
+    expect(types["Settings"].type?.children.map((child) => child.name)).toEqual([
+      "retries",
+      "labels",
+    ]);
+    expect(types["Settings"].type?.children[0].type?.type).toEqual(
+      ArgTag.UNION
     );
-    expect(
-      types["TaggedScores"].type?.children[1].type?.children.map(
-        (child) => child.type?.type
-      )
-    ).toEqual([ArgTag.NUMBER, ArgTag.STRING]);
-    expect(types["MaybeScores"].type?.type).toEqual(ArgTag.UNION);
-    expect(types["MaybeScores"].type?.children[0].type?.type).toEqual(
-      ArgTag.DICTIONARY
+    expect(types["Settings"].type?.children[1].type?.type).toEqual(
+      ArgTag.TUPLE
     );
+  });
+
+  it("recognizes aliased and typing_extensions TypedDict bases", () => {
+    const types = ProgramFactory.fromSource(
+      () => `from typing import TypedDict as TD
+
+class User(TD):
+    id: int
+
+class Flags(typing_extensions.TypedDict):
+    enabled: bool
+
+class Admin(User):
+    role: str`,
+      "python"
+    ).types;
+
+    expect(types["User"].type?.type).toEqual(ArgTag.OBJECT);
+    expect(types["User"].type?.children[0].name).toEqual("id");
+    expect(types["Flags"].type?.type).toEqual(ArgTag.OBJECT);
+    expect(types["Flags"].type?.children[0].type?.type).toEqual(
+      ArgTag.BOOLEAN
+    );
+    expect(types["Admin"].type?.children.map((child) => child.name)).toEqual([
+      "id",
+      "role",
+    ]);
+  });
+
+  it("does not export ordinary Python classes as TypedDict objects", () => {
+    const types = ProgramFactory.fromSource(
+      () => `class Player:
+    name: str`,
+      "python"
+    ).types;
+
+    expect(types["Player"]).toBeUndefined();
+  });
+
+  it("does not model ordinary dictionaries as fixed objects", () => {
+    const types = ProgramFactory.fromSource(
+      () => "type DynamicConfig = dict[str, int]",
+      "python"
+    ).types;
+
+    expect(types["DynamicConfig"].type).toBeUndefined();
+    expect(types["DynamicConfig"].typeRefName).toEqual("dict");
   });
 
   it("handles Python numeric literal spellings", () => {
