@@ -322,6 +322,7 @@
     "jasmine": "5.9.0",
     "nanofuzz-study": "nanofuzz/nanofuzz-study#main",
     "rimraf": "^5.0.5",
+    "ts-node": "^10.9.2",
     "tslib": "^2.1.0",
     "typescript-eslint": "^8.59.1"
   }
