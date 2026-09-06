@@ -174,18 +174,35 @@ function generateRandomInputFn(
         if (!keySpec || !valueSpec) {
           throw new Error("Dictionary arguments require key and value types");
         }
-        // Inputs cross the JSON boundary, where object keys are strings.  Use
-        // the configured default collection length for the number of entries.
+        // The number of key-value entries is sampled dictLength times.
+        const dictLen = arg.getOptions().dictLength;
         const count = getRandomNumber(
           prng,
-          arg.getOptions().dftDimLength.min,
-          arg.getOptions().dftDimLength.max,
+          dictLen.min,
+          dictLen.max,
           ArgDef.getDefaultOptions()
         );
         const out: { [key: string]: ArgValueType } = {};
-        for (let i = 0; i < count; i++) {
-          out[String(generateRandomInputFn(keySpec, prng)())] =
-            generateRandomInputFn(valueSpec, prng)();
+        const keyGen = generateRandomInputFn(keySpec, prng);
+        const valGen = generateRandomInputFn(valueSpec, prng);
+
+        entryLoop: for (let i = 0; i < count; i++) {
+          let attempts = 0;
+          while (true) {
+            const keyStr = String(keyGen());
+            if (!Object.prototype.hasOwnProperty.call(out, keyStr)) {
+              out[keyStr] = valGen();
+              continue entryLoop;
+            }
+            if (++attempts > 50) {
+              if (Object.keys(out).length >= dictLen.min) {
+                break entryLoop;
+              }
+              throw new Error(
+                "Unable to generate enough unique dictionary keys. Are constraints possible to meet?"
+              );
+            }
+          }
         }
         return out;
       };

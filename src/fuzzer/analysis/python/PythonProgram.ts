@@ -2480,6 +2480,80 @@ export class PythonProgram extends AbstractProgram {
         break;
       }
 
+      case "dictionaries": {
+        const keysArg = getKwdArg(node, "keys", 0);
+        const valuesArg = getKwdArg(node, "values", 1);
+
+        let keyTypeRef: TypeRef | undefined;
+        if (
+          keysArg &&
+          (keysArg.type === "call" || keysArg.type === "identifier")
+        ) {
+          keyTypeRef = this._getTypeRefFromStrategy(keysArg);
+        }
+        if (keyTypeRef === undefined) {
+          keyTypeRef = {
+            module: this._filename,
+            dims: 0,
+            optional: false,
+            isExported: false,
+            type: {
+              type: ArgTag.UNRESOLVED,
+              dims: 0,
+              children: [],
+              resolved: false,
+            },
+            typeRefName: keysArg?.text ?? "Any",
+          };
+        }
+        keyTypeRef.name = "key";
+
+        let valueTypeRef: TypeRef | undefined;
+        if (
+          valuesArg &&
+          (valuesArg.type === "call" || valuesArg.type === "identifier")
+        ) {
+          valueTypeRef = this._getTypeRefFromStrategy(valuesArg);
+        }
+        if (valueTypeRef === undefined) {
+          valueTypeRef = {
+            module: this._filename,
+            dims: 0,
+            optional: false,
+            isExported: false,
+            type: {
+              type: ArgTag.UNRESOLVED,
+              dims: 0,
+              children: [],
+              resolved: false,
+            },
+            typeRefName: valuesArg?.text ?? "Any",
+          };
+        }
+        valueTypeRef.name = "value";
+
+        const minSize = parseLiteral(getKwdArg(node, "min_size", -1));
+        const maxSize = parseLiteral(getKwdArg(node, "max_size", -1));
+        const dftInterval = ArgDef.getDefaultOptions().dictLength;
+
+        const options: ArgOptionOverride = {};
+        if (minSize !== undefined || maxSize !== undefined) {
+          options.dictLength = {
+            min: Number(minSize ?? dftInterval.min),
+            max: Number(maxSize ?? dftInterval.max),
+          };
+        }
+
+        thisType.type = {
+          type: ArgTag.DICTIONARY,
+          dims: 0,
+          children: [keyTypeRef, valueTypeRef],
+          ...(Object.keys(options).length > 0 ? { options } : {}),
+          resolved: true,
+        };
+        break;
+      }
+
       case "one_of": {
         const argsNode = node.childForFieldName("arguments");
         const children: TypeRef[] = [];

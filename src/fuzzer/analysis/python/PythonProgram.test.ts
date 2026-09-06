@@ -1436,6 +1436,40 @@ def test_optional_dict(payload):
     expect(optField?.isOptional()).toBeTrue();
   });
 
+  it("hypothesis @given `dictionaries` strategy", () => {
+    const fn = ProgramFactory.fromSource(
+      () => `
+@settings(max_examples=500, deadline=None)
+@given(
+    pairs=st.dictionaries(
+        st.integers(min_value=0, max_value=200),
+        st.integers(min_value=0, max_value=200),
+        min_size=3, max_size=20,
+    ),
+)
+def test_popitem_returns_key_value_pair(pairs):
+    pass
+      `,
+      "python"
+    ).functionsExported["test_popitem_returns_key_value_pair"];
+
+    const arg = fn.getArgDefs()[0];
+    expect(arg.getName()).toEqual("pairs");
+    expect(arg.getType()).toEqual(ArgTag.DICTIONARY);
+    const children = arg.getChildren();
+    expect(children.length).toEqual(2);
+
+    expect(children[0].getName()).toEqual("key");
+    expect(children[0].getType()).toEqual(ArgTag.NUMBER);
+    expect(children[0].getIntervals()).toEqual([{ min: 0, max: 200 }]);
+
+    expect(children[1].getName()).toEqual("value");
+    expect(children[1].getType()).toEqual(ArgTag.NUMBER);
+    expect(children[1].getIntervals()).toEqual([{ min: 0, max: 200 }]);
+
+    expect(arg.getOptions().dictLength).toEqual({ min: 3, max: 20 });
+  });
+
   it("hypothesis @given takes precedence over native type annotations", () => {
     const fn = ProgramFactory.fromSource(
       () => `

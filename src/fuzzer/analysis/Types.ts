@@ -145,6 +145,9 @@ export type ArgOptions = {
   // For type bytes
   byteLength: Interval<number>; // length of byte array allowed in the input
 
+  // For dictionaries
+  dictLength: Interval<number>; // length of dictionary allowed in the input
+
   // For type number
   numInteger: boolean; // true if the numeric argument input is an integer
 
@@ -173,17 +176,9 @@ export type ArgOptionOverrides = {
 /**
  * Argument option overrides
  */
-export type ArgOptionOverride = {
-  numInteger?: boolean;
+export type ArgOptionOverride = Partial<ArgOptions> & {
   numIntervals?: Interval<number>[];
-  dimLength?: Interval<number>[];
-  dimsUnique?: boolean;
-  strLength?: Interval<number>;
-  byteLength?: Interval<number>;
-  strCharset?: string;
-  strRegex?: string;
   children?: ArgOptionOverrides;
-  isNoInput?: boolean;
 };
 
 /** Options for generating type annotations */

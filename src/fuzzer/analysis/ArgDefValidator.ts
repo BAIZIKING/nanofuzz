@@ -150,9 +150,14 @@ export class ArgDefValidator {
           ) {
             return false;
           }
+          const dictLen = options.dictLength;
+          const entries = Object.entries(value);
+          if (entries.length < dictLen.min || entries.length > dictLen.max) {
+            return false;
+          }
           const [keySpec, valueSpec] = spec.getChildren();
           if (!keySpec || !valueSpec) return false;
-          return Object.entries(value).every(
+          return entries.every(
             ([key, entry]) =>
               ArgDefValidator.validate(key, keySpec) &&
               ArgDefValidator.validate(entry, valueSpec)
