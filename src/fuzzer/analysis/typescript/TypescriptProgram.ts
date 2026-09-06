@@ -788,7 +788,7 @@ export class TypescriptProgram extends AbstractProgram {
         if (typeName === "Uint8Array" || typeName === "Buffer") {
           return [ArgTag.BYTES, 0, typeName];
         }
-        if (typeName === "Record") {
+        if (typeName === "Record" || typeName === "Map") {
           return [ArgTag.DICTIONARY, 0, typeName];
         }
         return [ArgTag.UNRESOLVED, 0, typeName];
@@ -849,7 +849,7 @@ export class TypescriptProgram extends AbstractProgram {
       case "TSTypeReference": {
         const typeName = getIdentifierName(node.typeName);
         if (
-          typeName === "Record" &&
+          (typeName === "Record" || typeName === "Map") &&
           "typeParameters" in node &&
           node.typeParameters &&
           node.typeParameters.params.length === 2
@@ -1300,6 +1300,7 @@ export class TypescriptProgram extends AbstractProgram {
           break;
         }
 
+        case "Map":
         case "Record": {
           if (typeParams.length === 2) {
             const keyTypeRef = this._getTypeRefFromAstNode(
@@ -1318,6 +1319,7 @@ export class TypescriptProgram extends AbstractProgram {
               dims: 0,
               optional: false,
               isExported: false,
+              typeRefName: typeName,
               type: {
                 dims: 0,
                 type: ArgTag.DICTIONARY,
@@ -1763,6 +1765,9 @@ export class TypescriptProgram extends AbstractProgram {
         const valType = valChild
           ? TypescriptProgram.getTypeAnnotation(valChild, options)
           : "any";
+        if (arg.getTypeRef() === "Map") {
+          return `Map<${keyType}, ${valType}>`;
+        }
         return `Record<${keyType}, ${valType}>`;
       }
 

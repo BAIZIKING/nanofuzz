@@ -424,7 +424,8 @@ export const returnsValueArrow = () => "hello";
       export function testDicts(
         rec: Record<string, number>,
         idxSig: { [key: string]: boolean },
-        aliased: ScoreMap
+        aliased: ScoreMap,
+        myMap: Map<string, number>
       ): void {}
       `,
       "typescript"
@@ -434,7 +435,7 @@ export const returnsValueArrow = () => "hello";
     expect(fn).toBeDefined();
 
     const args = fn.getArgDefs();
-    expect(args.length).toBe(3);
+    expect(args.length).toBe(4);
 
     expect(args[0].getType()).toEqual(ArgTag.DICTIONARY);
     expect(
@@ -460,12 +461,22 @@ export const returnsValueArrow = () => "hello";
       ["value", ArgTag.NUMBER],
     ]);
 
+    expect(args[3].getType()).toEqual(ArgTag.DICTIONARY);
+    expect(args[3].getTypeRef()).toEqual("Map");
+    expect(
+      args[3].getChildren().map((c) => [c.getName(), c.getType()])
+    ).toEqual([
+      ["key", ArgTag.STRING],
+      ["value", ArgTag.NUMBER],
+    ]);
+
     expect(
       args.map((arg) => TypescriptProgram.getTypeAnnotation(arg, {}))
     ).toEqual([
       "Record<string, number>",
       "Record<string, boolean>",
       "Record<string, number>",
+      "Map<string, number>",
     ]);
   });
 
